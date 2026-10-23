@@ -316,6 +316,10 @@
     m.scale.setScalar(sc);
     m.position.set(x, y + (o.dy || 0), z);
     m.rotation.y = baseRot + (o.rot || 0) * Math.PI / 180;
+    if (o.base && o.y !== undefined) {   // appoggia il punto piu' basso del modello esattamente a "y"
+      m.updateMatrixWorld(true);
+      m.position.y += (y + (o.dy || 0)) - new THREE.Box3().setFromObject(m).min.y;
+    }
     if (rad) {
       // corregge i modelli con l'origine non alla base: il punto piu' basso va esattamente a "y"
       m.updateMatrixWorld(true);
@@ -425,17 +429,16 @@
     /* tappa 4: il porto al tramonto */
     pier(S_W5 + 0.4, 96.25, P("structure-platform-dock"));
     putXZ(P("structure-platform-dock"), 40, -12.4, heading(PW.pointAt(S_W5 + 0.4)), { y: "sea", dy: -0.06 });   // tassello della svolta
-    var DT = decks[0].max.y;   // quota delle assi: gli oggetti si appoggiano qui
     put(P("structure-platform-dock"), 89, 2.5, 0.6, { y: "sea" });
     put(P("structure-platform-dock"), 89, 2.5, -1.9, { y: "sea" });
     put(P("structure-platform-dock"), 89, 5.0, 0.6, { y: "sea" });
-    [3.1, 5.6, -4.4, -6.9].forEach(function (f) { put(P("structure-platform-dock"), 89, 2.5, f, { y: "sea" }); });   // appoggio per cannone, barili e casse
+    [3.1, 5.6].forEach(function (f) { put(P("structure-platform-dock"), 89, 2.5, f, { y: "sea" }); });   // appoggio per cannone, barili e casse
     put(P("ship-pirate-large"), 89, -8.2, 0, { y: "sea", rot: 0 });
-    put(P("cannon-mobile"), 89, 2.6, 5, { y: DT, rot: 200 }); put(P("barrel"), 89, 2.6, -4.6, { y: DT }); put(P("crate"), 89, 3.4, -5.2, { y: DT, rot: 20 });
-    put(P("cannon-ball"), 89, 3.1, 3.3, { y: DT });
+    put(P("cannon-mobile"), 89, 2.6, 5, { y: 0.5, base: true, rot: 200 }); put(P("barrel"), 89, 2.3, -1.6, { y: 0.5, base: true }); put(P("crate"), 89, 3.3, -2.7, { y: 0.5, base: true, rot: 20 });
+    put(P("cannon-ball"), 89, 3.1, 3.3, { y: 0.5, base: true });
     put(P("flag-pirate-high"), 81.5, 1.5, 0, { y: 0.5 }); put(P("flag-pirate-high"), 81.5, -1.5, 0, { y: 0.5, rot: 180 });
     put(P("boat-row-large"), 84, 5, 0, { y: "sea", rot: 80 });
-    put(P("rocks-a"), 93, 9, 0, { y: -0.3, scale: 1.5 }); put(P("rocks-b"), 85, -14, 0, { y: -0.3, scale: 1.4 });
+    put(P("rocks-a"), 93, 9, 0, { y: -1.5, base: true, scale: 1.8 }); put(P("rocks-b"), 85, -14, 0, { y: -1.5, base: true, scale: 1.7 });
     put(P("ship-small"), 83, 28, 0, { y: "sea", rot: 190 });
 
     /* tappa 5: la grotta */
@@ -452,7 +455,7 @@
     }
     // tetto di roccia
     var roof = new THREE.Mesh(new THREE.BoxGeometry(18.5, 0.6, 18.5), new THREE.MeshStandardMaterial({ color: 0x4d515c, roughness: 1, flatShading: true }));
-    roof.position.set(40, hp + 2.75 + 0.3, 9);
+    roof.position.set(40, hp + 2.75 + 0.05, 9);   // appoggiato piu' in basso: chiude lo spazio sopra la porta
     world.add(roof);
     // zoccolo di roccia sotto la facciata: niente muri sospesi sull'acqua (lascia libera la porta)
     [[31.0, 38.7], [41.3, 49.0]].forEach(function (r) {
@@ -482,8 +485,8 @@
       flickers.push({ light: light, base: 1.0, ph: idx * 1.7 });
     });
     // fuori dalla grotta: rocce ai lati dell'ingresso
-    putXZ(D("rocks"), 36.2, -0.6, 0, { scale: 4, y: terrainH(36.2, -0.6) - 0.2, rot: 20 });
-    putXZ(D("rocks"), 43.8, -0.6, 0, { scale: 4, y: terrainH(43.8, -0.6) - 0.2, rot: 140 });
+    putXZ(D("rocks"), 36.2, -0.6, 0, { scale: 6, rot: 20, maxRange: 99, sink: 0.5, allowSea: true });
+    putXZ(D("rocks"), 43.8, -0.6, 0, { scale: 6, rot: 140, maxRange: 99, sink: 0.5, allowSea: true });
   }
 
   /* ---------------- stazioni (oggetti della memoria) ---------------- */
