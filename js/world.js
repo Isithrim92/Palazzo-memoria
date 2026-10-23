@@ -427,6 +427,7 @@
     put(P("structure-platform-dock"), 89, 2.5, 0.6, { y: "sea" });
     put(P("structure-platform-dock"), 89, 2.5, -1.9, { y: "sea" });
     put(P("structure-platform-dock"), 89, 5.0, 0.6, { y: "sea" });
+    [3.1, 5.6, -4.4, -6.9].forEach(function (f) { put(P("structure-platform-dock"), 89, 2.5, f, { y: "sea" }); });   // appoggio per cannone, barili e casse
     put(P("ship-pirate-large"), 89, -8.2, 0, { y: "sea", rot: 0 });
     put(P("cannon-mobile"), 89, 2.6, 5, { y: 0.5, rot: 200 }); put(P("barrel"), 89, 2.6, -4.6, { y: 0.5 }); put(P("crate"), 89, 3.4, -5.2, { y: 0.5, rot: 20 });
     put(P("cannon-ball"), 89, 3.1, 3.3, { y: 0.5 });

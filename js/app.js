@@ -125,7 +125,7 @@
     }
     if (!state.near) {
       setPanel(kicker, "Raggiungi la tappa " + (state.i + 1), "Cerca l'oggetto numero " + (state.i + 1) + " lungo il percorso, oppure fatti accompagnare.", [
-        { label: "Portami lì", kind: "primary", run: function () { gotoStation(); } }
+        { label: "Portami lì (R)", kind: "primary", run: function () { gotoStation(); } }
       ]);
       return;
     }
@@ -177,7 +177,7 @@
     el.menu.classList.add("hidden");
     el.hud.classList.remove("hidden");
     if (IS_TOUCH) el.joy.classList.remove("hidden");
-    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · clic sull'oggetto per interagire · M menu · T modifica · I impostazioni" : "Trascina il mouse per guardare · W A S D o frecce per camminare · clic sull'oggetto · M menu · T modifica · I impostazioni");
+    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · clic sull'oggetto per interagire · M menu · T modifica · I impostazioni · R portami alla tappa" : "Trascina il mouse per guardare · W A S D o frecce per camminare · clic sull'oggetto · M menu · T modifica · I impostazioni");
     el.hint.style.opacity = "1";
     el.hint.classList.remove("hidden");
     setTimeout(function () { el.hint.style.opacity = "0"; }, 12000);
@@ -566,6 +566,7 @@
     if (state.screen !== "menu" && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.code === "Escape" && !state.modalOpen) askMenu();
       else if (e.code === "KeyM" && !state.modalOpen) askMenu();
+      else if (e.code === "KeyR" && !state.modalOpen) { if (!state.near && !state.walking) gotoStation(); }
       else if (e.code === "KeyT" && !state.modalOpen) openEditor(stationNearView(), true);
       else if (e.code === "KeyI") { if (state.modalOpen && !el.quick.classList.contains("hidden")) closeQuick(); else openQuick(); }
       else if (!state.modalOpen && (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "+")) setSens(settings.sens + 0.1, true);
