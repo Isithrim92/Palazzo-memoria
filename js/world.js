@@ -77,7 +77,8 @@
 
   // semi-larghezza percorribile attorno alla linea del percorso
   PW.corridor = function (s) {
-    var sw = seaWeight(s);
+    // sul molo il passaggio resta stretto (largo come le assi) fino a quando c'e' terra sotto
+    var sw = Math.max(band(s, PIER1[0] - 0.3, PIER1[1] + 1.4, 0.3), band(s, PIER2[0] - 0.3, PIER2[1] + 1.4, 0.3));
     var w = lerp(3.4, 1.15, sw);
     w = lerp(w, 1.1, smooth(DOOR[0] - 0.6, DOOR[0] + 0.6, s) * (1 - smooth(DOOR[1] - 0.3, DOOR[1] + 0.3, s)));
     w = lerp(w, 5.4, smooth(DOOR[1] - 0.2, DOOR[1] + 0.8, s));
@@ -324,8 +325,30 @@
     if (rad) { m.userData.rad = rad; m.userData.sunk = o.sink !== undefined ? o.sink : 0.12; }
     world.add(m);
     placed.ok++;
+    if (key.indexOf("platform-dock") >= 0) { m.updateMatrixWorld(true); decks.push(new THREE.Box3().setFromObject(m)); }
     return m;
   }
+  var decks = [];
+  // si puo' camminare qui? terra sopra il livello del mare, oppure assi del molo
+  function walkable(x, z) {
+    if (terrainH(x, z) >= -0.02) return true;
+    for (var i = 0; i < decks.length; i++) { var b = decks[i]; if (x >= b.min.x - 0.05 && x <= b.max.x + 0.05 && z >= b.min.z - 0.05 && z <= b.max.z + 0.05) return true; }
+    return false;
+  }
+  // controllo: tutti i punti raggiungibili a piedi devono avere terra o assi sotto
+  PW.scanWalk = function () {
+    var holes = [];
+    for (var s = 0; s <= LEN; s += 0.1) {
+      var pt = PW.pointAt(s), w = PW.corridor(s), rx = -pt.tz, rz = pt.tx;
+      [-1, -0.5, 0, 0.5, 1].forEach(function (f) {
+        var x = pt.x + rx * w * f, z = pt.z + rz * w * f, c = PW.constrain(x, z);
+        if (!walkable(c.x, c.z)) holes.push({ s: +s.toFixed(1), f: f, x: +c.x.toFixed(1), z: +c.z.toFixed(1) });
+      });
+    }
+    var ranges = [];
+    holes.forEach(function (h) { var l = ranges[ranges.length - 1]; if (l && h.s - l.to <= 0.31) { l.to = h.s; l.n++; } else ranges.push({ from: h.s, to: h.s, n: 1 }); });
+    return { holes: holes.length, ranges: ranges, sample: holes.filter(function (h) { return h.s > 16 && h.s < 17.4 || h.s < 81; }).slice(0, 8), decks: decks.slice(0, 3).map(function (b) { return [b.min.x, b.max.x, b.min.z, b.max.z].map(function (v) { return +v.toFixed(2); }); }) };
+  };
   // controllo: elenca gli oggetti appoggiati a terra che restano sospesi o sprofondati
   PW.audit = function () {
     var bad = [], n = 0;
@@ -353,7 +376,9 @@
   }
 
   function pier(sA, sB, deckKey) {
-    for (var s = sA; s <= sB; s += 2.5) put(deckKey, s, 0, 0, { y: "sea", dy: 0 });
+    // le assi arrivano fino a terra: l'ultima in ogni estremita' e' appena piu' bassa per non sfarfallare sulla sabbia
+    var n = Math.round((sB - sA) / 2.5);
+    for (var i = 0; i <= n; i++) put(deckKey, sA + i * 2.5, 0, 0, { y: "sea", dy: (i === 0 || i === n) ? -0.04 : 0 });
   }
 
   function buildScenery(scene) {
@@ -362,7 +387,7 @@
     var P = function (n) { return "p:" + n; }, D = function (n) { return "d:" + n; };
 
     /* tappa 1: il molo all'alba */
-    pier(1.25, 16, P("structure-platform-dock"));
+    pier(1.25, 16.25, P("structure-platform-dock"));
     put(P("structure-platform-dock"), 11, 2.5, 0.6, { y: "sea" });         // piattaforma laterale della tappa
     put(P("structure-platform-dock"), 11, 2.5, -1.9, { y: "sea" });
     put(P("structure-platform-dock"), 11, 5.0, 0.6, { y: "sea" });
@@ -398,7 +423,7 @@
     scatter([P("palm-straight")], 3, 56, 68, 8, 12, 63);
 
     /* tappa 4: il porto al tramonto */
-    pier(81.25, 95, P("structure-platform-dock"));
+    pier(78.75, 96.25, P("structure-platform-dock"));
     put(P("structure-platform-dock"), 89, 2.5, 0.6, { y: "sea" });
     put(P("structure-platform-dock"), 89, 2.5, -1.9, { y: "sea" });
     put(P("structure-platform-dock"), 89, 5.0, 0.6, { y: "sea" });
@@ -428,7 +453,7 @@
     world.add(roof);
     // colonne agli angoli, stendardi, botti, tavolo, torce
     [[34.4, 3.4], [45.6, 3.4], [34.4, 14.6], [45.6, 14.6]].forEach(function (p) { putXZ(D("column"), p[0], p[1], 0, { scale: FL, y: hp }); });
-    [[32.5, 7, -90], [32.5, 12, -90], [47.5, 7, 90], [47.5, 12, 90]].forEach(function (p) { putXZ(D("banner"), p[0], p[1], 0, { scale: FL, y: hp, rot: p[2] }); });
+    [[32.5, 7, -90], [32.5, 12, -90], [47.5, 7, 90], [47.5, 12, 90]].forEach(function (p) { putXZ(D("banner"), p[0] + (p[2] < 0 ? 0.22 : -0.22), p[1], 0, { scale: FL, y: hp, rot: p[2] }); });
     putXZ(D("barrel"), 35.2, 13.6, 0, { scale: FL, y: hp }); putXZ(D("barrel"), 36.4, 14.4, 0, { scale: FL, y: hp, rot: 40 }); putXZ(D("pot"), 44.4, 14.3, 0, { scale: FL, y: hp, rot: 20 });
     putXZ(D("table"), 44.5, 5, 0, { scale: FL, y: hp, rot: 90 });
     putXZ(D("potion"), 44.5, 5.2, 0, { scale: FL, y: hp + 0.78, rot: 0 });
@@ -571,6 +596,8 @@
       base.position.y = 0.04; g.add(base);
       var ped = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 1.0, 20), new THREE.MeshStandardMaterial({ color: 0x8a6b4a, roughness: 0.9, flatShading: true }));
       ped.position.y = 0.5; g.add(ped);
+      var hit = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 2.4, 12), new THREE.MeshBasicMaterial({ visible: false }));
+      hit.position.y = 1.2; g.add(hit);
       var holder = new THREE.Group();
       holder.position.y = 1.05; g.add(holder);
       var light = new THREE.PointLight(0xffffff, 0.7, 6, 1.5);
@@ -580,7 +607,7 @@
       var label = textSprite(function (c, W, H) { drawLabel(c, W, H, item.title, item.color); }, 1024, 256, 1.9, 0.475);
       label.position.y = 3.3; label.visible = false; g.add(label);
       world.add(g);
-      var st = { group: g, base: base, holder: holder, visual: null, shape: null, light: light, badge: badge, label: label, item: item, index: i, lookX: x, lookZ: z, lookY: pt.h + 1.62 };
+      var st = { group: g, ped: ped, hit: hit, base: base, holder: holder, visual: null, shape: null, light: light, badge: badge, label: label, item: item, index: i, lookX: x, lookZ: z, lookY: pt.h + 1.3 };
       stations.push(st);
       PW.restyleStation(i, item, false, false);
     });

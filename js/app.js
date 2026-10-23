@@ -45,7 +45,7 @@
     loader: $("loader"), loaderText: $("loaderText"), menu: $("menu"), greet: $("greet"), lastResult: $("lastResult"), nick: $("nick"),
     hud: $("hud"), hint: $("hint"), panel: $("panel"), pKicker: $("pKicker"), pTitle: $("pTitle"), pText: $("pText"), pBtns: $("pBtns"),
     toast: $("toast"), joy: $("joy"), joyKnob: $("joyKnob"), confirm: $("confirm"), cText: $("cText"), editor: $("editor"), editorList: $("editorList"),
-    invX: $("invX"), invY: $("invY"), sens: $("sens"), sensVal: $("sensVal"), lock: $("lock"), lockRow: $("lockRow")
+    invX: $("invX"), invY: $("invY"), sens: $("sens"), sensVal: $("sensVal"), lock: $("lock"), lockRow: $("lockRow"), quick: $("quick"), cross: $("cross"), qSens: $("qSens"), qSensVal: $("qSensVal"), qInvX: $("qInvX"), qInvY: $("qInvY"), qLock: $("qLock"), qLockRow: $("qLockRow"), btnQuick: $("btnQuick")
   };
 
   var sceneEl = $("scene"), rig = $("rig"), cam = $("cam");
@@ -177,10 +177,11 @@
     el.menu.classList.add("hidden");
     el.hud.classList.remove("hidden");
     if (IS_TOUCH) el.joy.classList.remove("hidden");
-    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · M o Esc per il menu" : "Trascina il mouse per guardare · W A S D o frecce per camminare · M per il menu");
+    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · clic sull'oggetto per interagire · M menu · T modifica · I impostazioni" : "Trascina il mouse per guardare · W A S D o frecce per camminare · clic sull'oggetto · M menu · T modifica · I impostazioni");
     el.hint.style.opacity = "1";
     el.hint.classList.remove("hidden");
-    setTimeout(function () { el.hint.style.opacity = "0"; }, 9000);
+    setTimeout(function () { el.hint.style.opacity = "0"; }, 12000);
+    if (!IS_TOUCH) el.cross.classList.remove("hidden");
     state.modalOpen = false;
     tryLock();
   }
@@ -231,7 +232,7 @@
   function toMenu() {
     auto = null;
     state.screen = "menu"; state.walking = false; state.near = false; state.shown = false;
-    el.hud.classList.add("hidden"); el.panel.classList.add("hidden"); el.joy.classList.add("hidden"); el.hint.classList.add("hidden");
+    el.hud.classList.add("hidden"); el.cross.classList.add("hidden"); el.panel.classList.add("hidden"); el.joy.classList.add("hidden"); el.hint.classList.add("hidden");
     view.x = START.x; view.z = START.z; view.yaw = START.yaw; view.pitch = 0;
     refreshStations();
     showMenu();
@@ -245,15 +246,14 @@
     if (last && last.text) { el.lastResult.textContent = last.text; el.lastResult.classList.remove("hidden"); }
     else el.lastResult.classList.add("hidden");
     el.nick.value = nick;
-    el.invX.checked = !!settings.invX; el.invY.checked = !!settings.invY;
-    el.sens.value = settings.sens; el.sensVal.textContent = settings.sens.toFixed(1) + "×";
-    el.lock.checked = !!settings.lock; el.lockRow.classList.toggle("hidden", IS_TOUCH);
+    syncSettingsUI(); el.lockRow.classList.toggle("hidden", IS_TOUCH);
     el.menu.classList.remove("hidden");
     state.modalOpen = true;
   }
 
   /* ---------- finestre: conferma ed editor ---------- */
   function closeModals() {
+    el.quick.classList.add("hidden");
     el.confirm.classList.add("hidden");
     el.editor.classList.add("hidden");
   }
@@ -267,6 +267,37 @@
       : "Sei sicuro di voler tornare al menu?";
     el.confirm.classList.remove("hidden");
     $("cNo").focus();
+  }
+
+  function syncSettingsUI() {
+    var t = settings.sens.toFixed(1) + "×";
+    el.sens.value = settings.sens; el.sensVal.textContent = t; el.qSens.value = settings.sens; el.qSensVal.textContent = t;
+    el.invX.checked = el.qInvX.checked = !!settings.invX; el.invY.checked = el.qInvY.checked = !!settings.invY;
+    el.lock.checked = el.qLock.checked = !!settings.lock;
+  }
+  function setSens(v, announce) {
+    settings.sens = Math.max(0.3, Math.min(3, Math.round(v * 10) / 10));
+    save(KEY.settings, settings); syncSettingsUI();
+    if (announce) toast("Sensibilità del mouse: " + settings.sens.toFixed(1) + "×", 1200);
+  }
+  function openQuick() {
+    if (state.modalOpen || state.screen === "menu") return;
+    unlock();
+    state.modalOpen = true;
+    syncSettingsUI();
+    el.qLockRow.classList.toggle("hidden", IS_TOUCH);
+    el.quick.classList.remove("hidden");
+    $("qClose").focus();
+  }
+  function closeQuick() {
+    el.quick.classList.add("hidden");
+    state.modalOpen = false;
+    tryLock();
+  }
+  function stationNearView() {
+    var best = state.i, bd = 1e9;
+    PW.stations.forEach(function (st, i) { var d = dist2station(i); if (d < bd) { bd = d; best = i; } });
+    return bd < 7 ? best : state.i;
   }
 
   var editorFocus = 0, editorFromPlay = false;
@@ -354,6 +385,33 @@
     lastLook = performance.now();
   }
 
+  /* ---------- mirino e clic sulle tappe ---------- */
+  var ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), aimed = -1;
+  function pick(nx, ny) {
+    var camera = cam.getObject3D("camera");
+    if (!camera) return -1;
+    ndc.set(nx, ny);
+    ray.setFromCamera(ndc, camera);
+    ray.far = 9;
+    var best = -1, bd = 1e9;
+    PW.stations.forEach(function (st, i) {
+      var hits = ray.intersectObject(st.hit, false);
+      if (hits.length && hits[0].distance < bd) { bd = hits[0].distance; best = i; }
+    });
+    return best;
+  }
+  function updateAim() {
+    if (IS_TOUCH || state.modalOpen || state.screen === "menu") { aimed = -1; return; }
+    var a = pick(0, 0);
+    if (a !== aimed) { aimed = a; el.cross.classList.toggle("ready", a >= 0); }
+  }
+  function interact(i) {
+    if (i < 0 || state.modalOpen || state.screen === "menu") return;
+    if (state.screen === "percorso") { openEditor(i, true); return; }
+    if (i === state.i && state.near && !state.shown) { state.shown = true; render(); return; }
+    toast(i === state.i ? "Hai già visto la risposta di questa tappa." : "Questa non è la tappa attuale del richiamo.", 1800);
+  }
+
   /* ---------- mouse bloccato (guardare senza cliccare) ---------- */
   var canvasEl = null;
   function locked() { return !!canvasEl && document.pointerLockElement === canvasEl; }
@@ -408,6 +466,7 @@
       view.x = c0.x; view.z = c0.z; view.y = c0.y; view.s = c0.s;
     }
     applyView(dt);
+    updateAim();
 
     // "vicino alla tappa"?
     if (state.screen !== "menu" && !state.walking) {
@@ -449,13 +508,22 @@
   /* ---------- guardare con mouse e dito ---------- */
   function setupLook() {
     var canvas = canvasEl = sceneEl.canvas || sceneEl.querySelector("canvas");
-    var drag = null;
+    var drag = null, clickStart = { x: 0, y: 0 };
     canvas.addEventListener("pointerdown", function (e) {
+      clickStart.x = e.clientX; clickStart.y = e.clientY;
       if (state.modalOpen || state.screen === "menu") return;
       if (e.pointerType === "mouse" && settings.lock && !IS_TOUCH && !locked()) { tryLock(); }
       if (locked() || drag) return;
-      drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY };
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ }
+    });
+    // clic (o tocco) senza spostamento: interagisce con l'oggetto indicato dal mirino o toccato
+    canvas.addEventListener("click", function (e) {
+      if (state.modalOpen || state.screen === "menu") return;
+      if (Math.abs(e.clientX - (clickStart.x)) + Math.abs(e.clientY - (clickStart.y)) > 10 && !locked()) return;
+      if (locked()) { interact(aimed); return; }
+      var r = canvas.getBoundingClientRect();
+      interact(pick(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1)));
     });
     canvas.addEventListener("pointermove", function (e) {
       if (locked() || !drag || e.pointerId !== drag.id) return;
@@ -495,7 +563,14 @@
   window.addEventListener("keydown", function (e) {
     if (typing(e)) return;
     if (/^(KeyW|KeyA|KeyS|KeyD|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(e.code)) { keys[e.code] = true; if (e.code.indexOf("Arrow") === 0 && !state.modalOpen) e.preventDefault(); }
-    if ((e.code === "Escape" || e.code === "KeyM") && !state.modalOpen && state.screen !== "menu") askMenu();
+    if (state.screen !== "menu" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.code === "Escape" && !state.modalOpen) askMenu();
+      else if (e.code === "KeyM" && !state.modalOpen) askMenu();
+      else if (e.code === "KeyT" && !state.modalOpen) openEditor(stationNearView(), true);
+      else if (e.code === "KeyI") { if (state.modalOpen && !el.quick.classList.contains("hidden")) closeQuick(); else openQuick(); }
+      else if (!state.modalOpen && (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "+")) setSens(settings.sens + 0.1, true);
+      else if (!state.modalOpen && (e.code === "Minus" || e.code === "NumpadSubtract" || e.key === "-")) setSens(settings.sens - 0.1, true);
+    }
   });
   window.addEventListener("keyup", function (e) { keys[e.code] = false; });
   window.addEventListener("blur", function () { keys = {}; });
@@ -506,7 +581,7 @@
     $("btnRichiamo").addEventListener("click", function () { startMode("richiamo"); });
     $("btnEdit").addEventListener("click", function () { openEditor(0, false); });
     $("btnMenu").addEventListener("click", askMenu);
-    $("btnEditHere").addEventListener("click", function () { openEditor(state.i, true); });
+    $("btnEditHere").addEventListener("click", function () { openEditor(stationNearView(), true); });
     $("cNo").addEventListener("click", function () { el.confirm.classList.add("hidden"); state.modalOpen = false; tryLock(); });
     $("cYes").addEventListener("click", function () { el.confirm.classList.add("hidden"); toMenu(); });
     $("eCancel").addEventListener("click", closeEditor);
@@ -526,8 +601,14 @@
     });
     el.invX.addEventListener("change", function () { settings.invX = el.invX.checked; save(KEY.settings, settings); });
     el.invY.addEventListener("change", function () { settings.invY = el.invY.checked; save(KEY.settings, settings); });
-    el.sens.addEventListener("input", function () { settings.sens = parseFloat(el.sens.value) || 1; el.sensVal.textContent = settings.sens.toFixed(1) + "×"; save(KEY.settings, settings); });
-    el.lock.addEventListener("change", function () { settings.lock = el.lock.checked; save(KEY.settings, settings); });
+    el.sens.addEventListener("input", function () { setSens(parseFloat(el.sens.value) || 1); });
+    el.qSens.addEventListener("input", function () { setSens(parseFloat(el.qSens.value) || 1); });
+    el.lock.addEventListener("change", function () { settings.lock = el.lock.checked; save(KEY.settings, settings); syncSettingsUI(); });
+    el.qLock.addEventListener("change", function () { settings.lock = el.qLock.checked; save(KEY.settings, settings); syncSettingsUI(); });
+    el.qInvX.addEventListener("change", function () { settings.invX = el.qInvX.checked; save(KEY.settings, settings); syncSettingsUI(); });
+    el.qInvY.addEventListener("change", function () { settings.invY = el.qInvY.checked; save(KEY.settings, settings); syncSettingsUI(); });
+    el.btnQuick.addEventListener("click", openQuick);
+    $("qClose").addEventListener("click", closeQuick);
     el.nick.addEventListener("change", function () { nick = el.nick.value.replace(/\s+/g, " ").trim().slice(0, 20); save(KEY.nick, nick); showMenu(); });
     window.addEventListener("resize", layoutJoystick);
   }
@@ -586,6 +667,6 @@
     toMenu: toMenu, render: render,
     setView: function (x, z, yaw, pitch) { var c = PW.constrain(x, z); view.x = c.x; view.z = c.z; view.y = c.y; view.s = c.s; view.yaw = yaw || 0; view.pitch = pitch || 0; view.yEased = view.y; },
     getItems: function () { return items; },
-    _lookDelta: lookDelta, settings: settings
+    _lookDelta: lookDelta, settings: settings, _pick: pick, _interact: interact, _aimed: function () { return aimed; }
   };
 })();
