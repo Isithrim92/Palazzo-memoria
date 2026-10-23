@@ -111,7 +111,8 @@
     var n = PW.nearest(x, z), s = n.s;
     var lw = 1 - seaWeight(s);
     var wt = PW.corridor(s) + 0.6;
-    var flat = lerp(SEABED, n.h, lw);
+    var cave = smooth(DOOR[0] - 1, DOOR[1], s);
+    var flat = lerp(SEABED, n.h - cave * 0.18, lw);
     var out = lerp(SEABED, n.h + ampAt(s) * (0.35 + 0.65 * noise(x, z)), lw);
     var h = lerp(flat, out, smooth(wt, wt + 5, n.d));
     return lerp(h, -2.2, smooth(14, 24, n.d));
@@ -164,10 +165,10 @@
   }
   // chiavi: [distanza lungo il percorso, palette]
   var KEYS = [
-    [11, pal("#5f78c4", "#ffb199", "#ffd2b0", 0.85, "#c8b6d8", "#3f7fa8", 40, 170, -0.6, 0.35, 0.6)],   // alba
-    [27, pal("#3f95de", "#c4e8ff", "#ffffff", 1.15, "#d2e4ff", "#2d9bd1", 60, 220, 0.3, 0.9, 0.3)],     // mattina
-    [49.5, pal("#5a98cf", "#ffe3a4", "#ffd47c", 1.05, "#ffecd0", "#3a90b0", 60, 220, 0.8, 0.55, 0.2)],  // pomeriggio dorato
-    [89, pal("#3a3478", "#ff7a52", "#ff8a4c", 0.85, "#c28aa8", "#8b5a7c", 40, 190, 0.9, 0.18, -0.2)],   // tramonto
+    [11, pal("#5f78c4", "#ffb199", "#ffd2b0", 0.85, "#c8b6d8", "#3b7fb0", 80, 330, -0.6, 0.35, 0.6)],   // alba
+    [27, pal("#3f95de", "#c4e8ff", "#ffffff", 1.15, "#d2e4ff", "#2d9bd1", 90, 380, 0.3, 0.9, 0.3)],     // mattina
+    [49.5, pal("#5a98cf", "#ffe3a4", "#ffd47c", 1.05, "#ffecd0", "#3a98b8", 90, 360, 0.8, 0.55, 0.2)],  // pomeriggio dorato
+    [89, pal("#3a3478", "#ff7a52", "#ff8a4c", 0.85, "#c28aa8", "#7a4f86", 70, 320, 0.9, 0.18, -0.2)],   // tramonto
     [100.5, pal("#090c18", "#141a2e", "#6a7ab0", 0.08, "#59607e", "#18203a", 4, 36, 0.2, 0.9, 0.2)]     // grotta
   ];
   var cur = pal("#000", "#000", "#fff", 1, "#fff", "#000", 40, 150, 0, 1, 0);
@@ -236,6 +237,7 @@
   /* ---------------- modelli ---------------- */
   var models = {};
   var PIRATE = ["barrel", "boat-row-large", "boat-row-small", "cannon-ball", "cannon-mobile", "castle-gate", "castle-wall", "chest", "crate", "crate-bottles", "flag-pirate-high", "grass", "grass-plant", "palm-bend", "palm-detailed-bend", "palm-detailed-straight", "palm-straight", "patch-grass", "patch-grass-foliage", "patch-sand-foliage", "rocks-a", "rocks-b", "rocks-sand-a", "rocks-sand-b", "rocks-sand-c", "ship-pirate-large", "ship-small", "ship-wreck", "structure", "structure-platform-dock", "tool-shovel", "tower-complete-large", "tower-complete-small"];
+  PIRATE.push("bottle");
   var DUNGEON = ["banner", "barrel", "chest", "coin", "column", "floor", "key", "pot", "potion", "rocks", "stones", "table", "wall", "wall-opening"];
 
   function loadAll(onProgress) {
@@ -246,6 +248,7 @@
     PIRATE.forEach(function (n) { jobs.push(["p:" + n, "assets/pirate/" + n + ".glb", true]); });
     DUNGEON.forEach(function (n) { jobs.push(["d:" + n, "assets/dungeon/" + n + ".glb", true]); });
     jobs.push(["lantern", "assets/lantern/wooden_lantern_01_1k.gltf", false]);
+    jobs.push(["compass", "assets/compass/seadogs_compass_1k.gltf", false]);
     var done = 0;
     return Promise.all(jobs.map(function (j) {
       return new Promise(function (resolve, reject) {
@@ -278,19 +281,65 @@
     var x = pt.x + rx * lat + pt.tx * fwd, z = pt.z + rz * lat + pt.tz * fwd;
     return putXZ(key, x, z, heading(pt), o);
   }
+  var bboxes = {};
+  function bboxOf(key) {
+    if (!bboxes[key]) {
+      var b = new THREE.Box3().setFromObject(models[key]);
+      bboxes[key] = b.getSize(new THREE.Vector3());
+    }
+    return bboxes[key];
+  }
+  var placed = { ok: 0, skipped: 0 };
   function putXZ(key, x, z, baseRot, o) {
     o = o || {};
     var src = models[key];
     if (!src) { console.warn("modello mancante", key); return null; }
+    var sc = o.scale || 1, y, rad = 0;
+    if (o.y === undefined) {
+      // oggetto appoggiato al terreno: si posa sul punto piu' basso sotto la sua impronta
+      var size = bboxOf(key);
+      rad = 0.35 * Math.max(size.x, size.z) * sc;
+      var mn = terrainH(x, z), mx = mn;
+      for (var k = 0; k < 8; k++) {
+        var a = k * Math.PI / 4, h = terrainH(x + Math.cos(a) * rad, z + Math.sin(a) * rad);
+        if (h < mn) mn = h; if (h > mx) mx = h;
+      }
+      var flatPiece = key.indexOf("patch-") >= 0;
+      var maxRange = o.maxRange !== undefined ? o.maxRange : (flatPiece ? 0.3 : 2.2);
+      if (mx - mn > maxRange || (mn < 0.08 && !o.allowSea)) { placed.skipped++; return null; }
+      y = mn - (o.sink !== undefined ? o.sink : flatPiece ? 0.02 : 0.12);
+    } else {
+      y = o.y === "sea" ? 0.0 : o.y;
+    }
     var m = src.clone(true);
-    var sc = o.scale || 1;
     m.scale.setScalar(sc);
-    var y = o.y === undefined ? terrainH(x, z) : o.y === "sea" ? 0.0 : o.y;
     m.position.set(x, y + (o.dy || 0), z);
     m.rotation.y = baseRot + (o.rot || 0) * Math.PI / 180;
+    if (rad) {
+      // corregge i modelli con l'origine non alla base: il punto piu' basso va esattamente a "y"
+      m.updateMatrixWorld(true);
+      var bb = new THREE.Box3().setFromObject(m);
+      m.position.y += (y + (o.dy || 0)) - bb.min.y;
+    }
+    if (rad) { m.userData.rad = rad; m.userData.sunk = o.sink !== undefined ? o.sink : 0.12; }
     world.add(m);
+    placed.ok++;
     return m;
   }
+  // controllo: elenca gli oggetti appoggiati a terra che restano sospesi o sprofondati
+  PW.audit = function () {
+    var bad = [], n = 0;
+    world.children.forEach(function (m) {
+      if (!m.userData.rad) return;
+      n++;
+      var box = new THREE.Box3().setFromObject(m), r = m.userData.rad, x = m.position.x, z = m.position.z;
+      var mn = terrainH(x, z);
+      for (var k = 0; k < 8; k++) { var a = k * Math.PI / 4; mn = Math.min(mn, terrainH(x + Math.cos(a) * r, z + Math.sin(a) * r)); }
+      var gap = box.min.y - mn;
+      if (gap > 0.15) bad.push({ x: +x.toFixed(1), z: +z.toFixed(1), gap: +gap.toFixed(2) });
+    });
+    return { checked: n, floating: bad, skipped: placed.skipped };
+  };
   function scatter(keys, count, s0, s1, lmin, lmax, seed, o) {
     var rnd = mulberry(seed);
     for (var i = 0; i < count; i++) {
@@ -329,10 +378,11 @@
     var palms = [P("palm-bend"), P("palm-straight"), P("palm-detailed-straight"), P("palm-detailed-bend")];
     put(palms[2], 27, 5.2, 0.8, { rot: 20 }); put(palms[0], 27, 7.6, -2.5, { rot: 200 }); put(palms[3], 27, -6.6, 2.2, { rot: 90 });
     put(P("rocks-sand-a"), 27, -2.4 * -1 + 6.8, 5, { rot: 40 }); put(P("rocks-sand-b"), 27, -7.5, -4, { rot: 150 });
-    put(P("chest"), 27, 2.4, -2.1, { rot: 20, dy: -0.05 }); put(P("tool-shovel"), 27, 3.4, -2.6, { rot: 100, dy: 0.6 });
+    put(P("chest"), 27, 2.4, -2.1, { rot: 20, dy: -0.05 }); put(P("tool-shovel"), 27, 3.4, -2.6, { rot: 100, sink: 0.3 });
     scatter(palms, 9, 19, 44, 6, 14, 11);
     scatter([P("rocks-sand-a"), P("rocks-sand-b"), P("rocks-sand-c")], 7, 18, 40, 5.5, 11, 23);
-    scatter([P("patch-sand-foliage"), P("grass-plant"), P("grass")], 14, 18, 46, 3.9, 7.5, 31);
+    scatter([P("patch-sand-foliage")], 9, 18, 46, 3.9, 7.5, 31, { scale: 0.45 });
+    scatter([P("grass-plant"), P("grass")], 12, 18, 46, 3.9, 7.5, 32);
     put(P("ship-wreck"), 36, -15, 0, { rot: 75, dy: -0.4 });
 
     /* tappa 3: la collina al pomeriggio */
@@ -342,7 +392,8 @@
     put(P("castle-gate"), 61, -6.2, 0, { rot: 90 });
     put(P("tower-complete-small"), 37, -8, 0, { rot: 40 });
     put(P("structure"), 54, 6, 0, { rot: 0 });
-    scatter([P("patch-grass-foliage"), P("grass-plant"), P("patch-grass")], 16, 36, 68, 3.9, 8, 41);
+    scatter([P("patch-grass-foliage"), P("patch-grass")], 10, 36, 68, 3.9, 8, 41, { scale: 0.45 });
+    scatter([P("grass-plant")], 12, 36, 68, 3.9, 8, 42);
     scatter([P("rocks-a"), P("rocks-b")], 8, 38, 70, 7, 13, 53, { scale: 1.2 });
     scatter([P("palm-straight")], 3, 56, 68, 8, 12, 63);
 
@@ -404,6 +455,7 @@
   /* ---------------- stazioni (oggetti della memoria) ---------------- */
   var stations = [];
   PW.stations = stations;
+
   function makeGeometry(shape) {
     switch (shape) {
       case "cone": return new THREE.ConeGeometry(0.36, 0.85, 24);
@@ -415,7 +467,62 @@
       default: return new THREE.BoxGeometry(0.7, 0.7, 0.7);
     }
   }
-  PW.SHAPES = [["box", "Cubo"], ["cone", "Cono"], ["torus", "Anello"], ["torusknot", "Nodo"], ["octahedron", "Cristallo"], ["sphere", "Sfera"], ["cylinder", "Cilindro"]];
+
+  // catalogo degli oggetti sceglibili nell'editor, raggruppati per ambiente
+  PW.SHAPE_GROUPS = [
+    { name: "Forme semplici", items: [["box", "Cubo"], ["cone", "Cono"], ["torus", "Anello"], ["torusknot", "Nodo"], ["octahedron", "Cristallo"], ["sphere", "Sfera"], ["cylinder", "Cilindro"]] },
+    { name: "Isola dei pirati", items: [["m:cannonball", "Palla di cannone"], ["m:chest", "Forziere"], ["m:compass", "Bussola"], ["m:bottle", "Bottiglia"], ["m:flag", "Bandiera pirata"], ["m:cannon", "Cannone"], ["m:barrel", "Barile"]] },
+    { name: "Grotta", items: [["m:lantern", "Lanterna"], ["m:flame", "Fiamma"], ["m:key", "Chiave"], ["m:coin", "Moneta"], ["m:potion", "Pozione"], ["m:pot", "Vaso"]] }
+  ];
+  PW.shapeIds = function () {
+    var ids = [];
+    PW.SHAPE_GROUPS.forEach(function (g) { g.items.forEach(function (it) { ids.push(it[0]); }); });
+    return ids;
+  };
+  // id --> [modello, dimensione massima in metri]
+  var MODEL_SHAPES = {
+    "m:cannonball": ["p:cannon-ball", 0.55], "m:chest": ["p:chest", 0.85], "m:compass": ["compass", 0.7], "m:bottle": ["p:bottle", 0.8],
+    "m:flag": ["p:flag-pirate-high", 1.3], "m:cannon": ["p:cannon-mobile", 1.05], "m:barrel": ["p:barrel", 0.8],
+    "m:lantern": ["lantern", 0.85], "m:key": ["d:key", 0.8], "m:coin": ["d:coin", 0.7], "m:potion": ["d:potion", 0.8], "m:pot": ["d:pot", 0.75]
+  };
+
+  // costruisce l'aspetto dell'oggetto: forma semplice, modello 3D o fiamma
+  function makeVisual(shape, color) {
+    var g = new THREE.Group(), info = MODEL_SHAPES[shape];
+    if (info && models[info[0]]) {
+      var m = models[info[0]].clone(true);
+      var box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
+      var sc = info[1] / Math.max(size.x, size.y, size.z);
+      m.scale.multiplyScalar(sc);
+      box.setFromObject(m);
+      m.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+      g.add(m);
+      g.userData.kind = "model";
+    } else if (shape === "m:flame") {
+      var outer = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.62, 14), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.92 }));
+      outer.position.y = 0.36;
+      var inner = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.38, 12), new THREE.MeshBasicMaterial({ color: 0xffe27a }));
+      inner.position.y = 0.26;
+      var lamp = new THREE.PointLight(0xff9a3c, 1.1, 6, 1.6);
+      lamp.position.y = 0.4;
+      g.add(outer, inner, lamp);
+      g.userData.kind = "flame";
+    } else {
+      var mesh = new THREE.Mesh(makeGeometry(shape), new THREE.MeshStandardMaterial({ color: color, roughness: 0.45, metalness: 0.2, emissive: color, emissiveIntensity: 0.12 }));
+      mesh.position.y = 0.6;
+      if (shape === "torus") mesh.rotation.x = Math.PI * 0.4;
+      g.add(mesh);
+      g.userData.kind = "shape";
+      g.userData.mesh = mesh;
+    }
+    return g;
+  }
+
+  function disposeVisual(v) {
+    v.traverse(function (o) {
+      if (o.isMesh && o.userData && o.parent === v && o.geometry) o.geometry.dispose();
+    });
+  }
 
   function textSprite(draw, w, h, scaleX, scaleY) {
     var cv = document.createElement("canvas");
@@ -464,16 +571,16 @@
       base.position.y = 0.04; g.add(base);
       var ped = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 1.0, 20), new THREE.MeshStandardMaterial({ color: 0x8a6b4a, roughness: 0.9, flatShading: true }));
       ped.position.y = 0.5; g.add(ped);
-      var obj = new THREE.Mesh(makeGeometry(item.shape), new THREE.MeshStandardMaterial({ color: item.color, roughness: 0.45, metalness: 0.2, emissive: item.color, emissiveIntensity: 0.12 }));
-      obj.position.y = 1.62; g.add(obj);
+      var holder = new THREE.Group();
+      holder.position.y = 1.05; g.add(holder);
       var light = new THREE.PointLight(0xffffff, 0.7, 6, 1.5);
       light.position.set(0, 2.3, 0); g.add(light);
       var badge = textSprite(function (c, W, H) { drawBadge(c, W, H, i + 1, item.color, false); }, 256, 256, 0.55, 0.55);
-      badge.position.y = 0.0 + 2.55; g.add(badge);
+      badge.position.y = 2.7; g.add(badge);
       var label = textSprite(function (c, W, H) { drawLabel(c, W, H, item.title, item.color); }, 1024, 256, 1.9, 0.475);
-      label.position.y = 3.2; label.visible = false; g.add(label);
+      label.position.y = 3.3; label.visible = false; g.add(label);
       world.add(g);
-      var st = { group: g, base: base, obj: obj, light: light, badge: badge, label: label, item: item, index: i, lookX: x, lookZ: z, lookY: pt.h + 1.62 };
+      var st = { group: g, base: base, holder: holder, visual: null, shape: null, light: light, badge: badge, label: label, item: item, index: i, lookX: x, lookZ: z, lookY: pt.h + 1.62 };
       stations.push(st);
       PW.restyleStation(i, item, false, false);
     });
@@ -483,13 +590,12 @@
   PW.restyleStation = function (i, item, active, showLabel) {
     var st = stations[i];
     st.item = item;
-    if (st.obj.userData.shape !== item.shape) {
-      st.obj.geometry.dispose();
-      st.obj.geometry = makeGeometry(item.shape);
-      st.obj.userData.shape = item.shape;
-      st.obj.rotation.set(item.shape === "torus" ? Math.PI * 0.4 : 0, 0, 0);
+    if (st.shape !== item.shape || (st.visual && st.visual.userData.kind === "shape" && st.color !== item.color)) {
+      if (st.visual) { st.holder.remove(st.visual); disposeVisual(st.visual); }
+      st.visual = makeVisual(item.shape, item.color);
+      st.holder.add(st.visual);
+      st.shape = item.shape; st.color = item.color;
     }
-    st.obj.material.color.set(item.color); st.obj.material.emissive.set(item.color);
     st.base.material.color.set(item.color); st.base.material.opacity = active ? 0.95 : 0.45;
     st.light.color.set(item.color);
     var b = st.badge;
@@ -514,10 +620,13 @@
   PW.animate = function (time) {
     var t = time / 1000;
     stations.forEach(function (st) {
-      var tilt = st.item.shape === "torus" ? Math.PI * 0.4 : 0;
-      st.obj.rotation.y = t * 0.5;
-      st.obj.rotation.x = tilt;
-      st.obj.position.y = 1.62 + Math.sin(t * 1.4 + st.index) * 0.04;
+      var kind = st.visual && st.visual.userData.kind;
+      if (kind !== "flame") st.holder.rotation.y = t * 0.5;
+      st.holder.position.y = 1.05 + Math.sin(t * 1.4 + st.index) * 0.04;
+      if (kind === "flame") {
+        var f = 1 + 0.07 * Math.sin(t * 9 + st.index) + 0.05 * Math.sin(t * 15.3);
+        st.visual.scale.set(1 / Math.sqrt(f), f, 1 / Math.sqrt(f));
+      }
     });
     flickers.forEach(function (f) {
       f.light.intensity = f.base * (0.85 + 0.12 * Math.sin(t * 7.3 + f.ph) + 0.06 * Math.sin(t * 13.1 + f.ph * 2));

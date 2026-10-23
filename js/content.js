@@ -8,7 +8,7 @@
     title : il concetto da ricordare
     note  : una riga di spiegazione
     image : l'immagine strana o vivida che colleghi al concetto (e all'oggetto nel luogo)
-    shape : forma dell'oggetto 3D: box | cone | torus | torusknot | octahedron | sphere | cylinder
+    shape : oggetto: box | cone | torus | torusknot | octahedron | sphere | cylinder | m:cannonball | m:chest | m:compass | m:bottle | m:flag | m:cannon | m:barrel | m:lantern | m:flame | m:key | m:coin | m:potion | m:pot
     color : colore dell'oggetto (esadecimale)
 */
 window.PALAZZO_CONTENT = {

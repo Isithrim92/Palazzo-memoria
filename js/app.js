@@ -17,7 +17,7 @@
   }
   function save(key, value) { try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* ignora */ } }
 
-  var SHAPES = ["box", "cone", "torus", "torusknot", "octahedron", "sphere", "cylinder"];
+  var SHAPES = PW.shapeIds();
   function clean(item, def) {
     function str(v, max, d) { v = typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : ""; return v || d; }
     return {
@@ -34,7 +34,8 @@
   }
 
   var items = loadItems();
-  var settings = load(KEY.settings, { invX: false, invY: false });
+  var settings = load(KEY.settings, {});
+  settings = { invX: !!settings.invX, invY: !!settings.invY, sens: (typeof settings.sens === "number" && settings.sens >= 0.3 && settings.sens <= 3) ? settings.sens : 1, lock: settings.lock !== false };
   var nick = load(KEY.nick, "");
   var last = load(KEY.last, null);
 
@@ -44,7 +45,7 @@
     loader: $("loader"), loaderText: $("loaderText"), menu: $("menu"), greet: $("greet"), lastResult: $("lastResult"), nick: $("nick"),
     hud: $("hud"), hint: $("hint"), panel: $("panel"), pKicker: $("pKicker"), pTitle: $("pTitle"), pText: $("pText"), pBtns: $("pBtns"),
     toast: $("toast"), joy: $("joy"), joyKnob: $("joyKnob"), confirm: $("confirm"), cText: $("cText"), editor: $("editor"), editorList: $("editorList"),
-    invX: $("invX"), invY: $("invY")
+    invX: $("invX"), invY: $("invY"), sens: $("sens"), sensVal: $("sensVal"), lock: $("lock"), lockRow: $("lockRow")
   };
 
   var sceneEl = $("scene"), rig = $("rig"), cam = $("cam");
@@ -53,6 +54,7 @@
   var START = { x: 0, z: 8, yaw: 0 };
   var auto = null;
   var keys = {};
+  var lastLook = -1e9, lookAccX = 0, lookAccY = 0;
   var joyVec = { x: 0, y: 0 };
   var IS_TOUCH = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || "ontouchstart" in window || /[?&]joy=1/.test(location.search);
 
@@ -175,11 +177,12 @@
     el.menu.classList.add("hidden");
     el.hud.classList.remove("hidden");
     if (IS_TOUCH) el.joy.classList.remove("hidden");
-    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : "Trascina il mouse per guardare · W A S D o frecce per camminare";
+    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · M o Esc per il menu" : "Trascina il mouse per guardare · W A S D o frecce per camminare · M per il menu");
     el.hint.style.opacity = "1";
     el.hint.classList.remove("hidden");
     setTimeout(function () { el.hint.style.opacity = "0"; }, 9000);
     state.modalOpen = false;
+    tryLock();
   }
 
   function finishPercorso() {
@@ -235,6 +238,7 @@
   }
 
   function showMenu() {
+    unlock();
     el.greet.textContent = nick
       ? "Ciao, " + nick + ". Prima il Percorso per imparare, poi il Richiamo per verificare."
       : "Un percorso da esplorare in cui lasci ogni concetto in un luogo preciso: poi lo ritrovi camminando di nuovo lungo lo stesso percorso.";
@@ -242,6 +246,8 @@
     else el.lastResult.classList.add("hidden");
     el.nick.value = nick;
     el.invX.checked = !!settings.invX; el.invY.checked = !!settings.invY;
+    el.sens.value = settings.sens; el.sensVal.textContent = settings.sens.toFixed(1) + "×";
+    el.lock.checked = !!settings.lock; el.lockRow.classList.toggle("hidden", IS_TOUCH);
     el.menu.classList.remove("hidden");
     state.modalOpen = true;
   }
@@ -253,6 +259,8 @@
   }
 
   function askMenu() {
+    if (state.modalOpen || state.screen === "menu") return;
+    unlock();
     state.modalOpen = true;
     el.cText.textContent = state.screen === "richiamo"
       ? "Sei sicuro di voler tornare al menu? Il richiamo in corso andrà perso."
@@ -264,6 +272,7 @@
   var editorFocus = 0, editorFromPlay = false;
   function openEditor(index, fromPlay) {
     editorFocus = index || 0; editorFromPlay = !!fromPlay;
+    unlock();
     state.modalOpen = true;
     el.editorList.textContent = "";
     items.forEach(function (it, i) { el.editorList.appendChild(buildEditorRow(it, i)); });
@@ -286,9 +295,13 @@
     field("Immagine che colleghi all'oggetto", "e_image" + i, it.image, 120);
     var line = document.createElement("div"); line.className = "inline";
     var d1 = document.createElement("div"), d2 = document.createElement("div");
-    var l1 = document.createElement("label"); l1.htmlFor = "e_shape" + i; l1.textContent = "Forma dell'oggetto";
+    var l1 = document.createElement("label"); l1.htmlFor = "e_shape" + i; l1.textContent = "Oggetto";
     var sel = document.createElement("select"); sel.id = "e_shape" + i;
-    PW.SHAPES.forEach(function (s) { var o = document.createElement("option"); o.value = s[0]; o.textContent = s[1]; if (s[0] === it.shape) o.selected = true; sel.appendChild(o); });
+    PW.SHAPE_GROUPS.forEach(function (g) {
+      var og = document.createElement("optgroup"); og.label = g.name;
+      g.items.forEach(function (s) { var o = document.createElement("option"); o.value = s[0]; o.textContent = s[1]; if (s[0] === it.shape) o.selected = true; og.appendChild(o); });
+      sel.appendChild(og);
+    });
     d1.appendChild(l1); d1.appendChild(sel);
     var l2 = document.createElement("label"); l2.htmlFor = "e_color" + i; l2.textContent = "Colore";
     var col = document.createElement("input"); col.type = "color"; col.id = "e_color" + i; col.value = it.color;
@@ -309,6 +322,7 @@
   function closeEditor() {
     el.editor.classList.add("hidden");
     state.modalOpen = state.screen === "menu";
+    if (!state.modalOpen) tryLock();
   }
 
   /* ---------- movimento ---------- */
@@ -317,6 +331,40 @@
   function walkTo(i, done) {
     auto = { s: PW.stationS[i], i: i, phase: "walk", done: done, hold: 0 };
   }
+
+  function applyLook(dt) {
+    if (!lookAccX && !lookAccY) return;
+    var k = 1 - Math.exp(-dt * 35);
+    var dx = lookAccX * k, dy = lookAccY * k;
+    lookAccX -= dx; lookAccY -= dy;
+    if (Math.abs(lookAccX) < 0.01) lookAccX = 0;
+    if (Math.abs(lookAccY) < 0.01) lookAccY = 0;
+    view.yaw += dx; view.pitch += dy;
+    view.pitch = Math.max(-1.25, Math.min(1.25, view.pitch));
+  }
+
+  // dx, dy in pixel; mode "lock": stile gioco (muovi a destra = guardi a destra); "drag": trascinamento (come prima)
+  function lookDelta(dx, dy, mode) {
+    if (state.modalOpen || state.screen === "menu") return;
+    dx = Math.max(-120, Math.min(120, dx)); dy = Math.max(-120, Math.min(120, dy));
+    var k = (mode === "lock" ? 0.0022 : 0.0036) * settings.sens;
+    var sx = mode === "lock" ? -1 : 1, sy = sx;
+    lookAccX += dx * k * sx * (settings.invX ? -1 : 1);
+    lookAccY += dy * k * sy * (settings.invY ? -1 : 1);
+    lastLook = performance.now();
+  }
+
+  /* ---------- mouse bloccato (guardare senza cliccare) ---------- */
+  var canvasEl = null;
+  function locked() { return !!canvasEl && document.pointerLockElement === canvasEl; }
+  function tryLock() {
+    if (IS_TOUCH || !settings.lock || !canvasEl || locked() || state.modalOpen || state.screen === "menu") return;
+    try {
+      var r = canvasEl.requestPointerLock && canvasEl.requestPointerLock();
+      if (r && r.catch) r.catch(function () { /* il browser non lo permette: resta il trascinamento */ });
+    } catch (e) { /* ignora */ }
+  }
+  function unlock() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) { /* ignora */ } }
 
   function applyView(dt) {
     var eased = Math.min(1, dt * 10);
@@ -333,6 +381,7 @@
       applyView(dt);
       return;
     }
+    applyLook(dt);
     var f = 0, sd = 0, turn = 0;
     if (keys.KeyW || keys.ArrowUp) f += 1;
     if (keys.KeyS || keys.ArrowDown) f -= 1;
@@ -379,15 +428,19 @@
       var prx = -pt.tz, prz = pt.tx;
       view.x = pt.x + prx * lat; view.z = pt.z + prz * lat; view.y = pt.h; view.s = ns;
       var yawT = Math.atan2(-pt.tx * dir, -pt.tz * dir);
-      view.yaw += wrapAngle(yawT - view.yaw) * Math.min(1, dt * 6);
-      view.pitch += (0 - view.pitch) * Math.min(1, dt * 4);
+      if (performance.now() - lastLook > 900) {
+        view.yaw += wrapAngle(yawT - view.yaw) * Math.min(1, dt * 6);
+        view.pitch += (0 - view.pitch) * Math.min(1, dt * 4);
+      }
       if (remaining < 0.08) a.phase = "turn";
     } else {
       var st = PW.stations[a.i];
       var dx = st.lookX - view.x, dz = st.lookZ - view.z, d = Math.sqrt(dx * dx + dz * dz);
       var yawL = Math.atan2(-dx, -dz), pitchL = Math.atan2(st.lookY - (view.y + 1.6), d);
-      view.yaw += wrapAngle(yawL - view.yaw) * Math.min(1, dt * 7);
-      view.pitch += (pitchL - view.pitch) * Math.min(1, dt * 7);
+      if (performance.now() - lastLook > 900) {
+        view.yaw += wrapAngle(yawL - view.yaw) * Math.min(1, dt * 7);
+        view.pitch += (pitchL - view.pitch) * Math.min(1, dt * 7);
+      }
       a.hold += dt;
       if (a.hold > 0.55) { var done = a.done; auto = null; if (done) done(); }
     }
@@ -395,26 +448,31 @@
 
   /* ---------- guardare con mouse e dito ---------- */
   function setupLook() {
-    var canvas = sceneEl.canvas || sceneEl.querySelector("canvas");
+    var canvas = canvasEl = sceneEl.canvas || sceneEl.querySelector("canvas");
     var drag = null;
     canvas.addEventListener("pointerdown", function (e) {
-      if (state.modalOpen || state.screen === "menu" || drag) return;
+      if (state.modalOpen || state.screen === "menu") return;
+      if (e.pointerType === "mouse" && settings.lock && !IS_TOUCH && !locked()) { tryLock(); }
+      if (locked() || drag) return;
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ }
     });
     canvas.addEventListener("pointermove", function (e) {
-      if (!drag || e.pointerId !== drag.id) return;
+      if (locked() || !drag || e.pointerId !== drag.id) return;
       var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       drag.x = e.clientX; drag.y = e.clientY;
-      var k = 0.0036;
-      view.yaw += dx * k * (settings.invX ? -1 : 1);
-      view.pitch += dy * k * (settings.invY ? -1 : 1);
-      view.pitch = Math.max(-1.25, Math.min(1.25, view.pitch));
-      if (auto && (Math.abs(dx) + Math.abs(dy) > 0)) { /* guardare non interrompe la camminata automatica */ }
+      lookDelta(dx, dy, "drag");
     });
     function end(e) { if (drag && e.pointerId === drag.id) drag = null; }
     canvas.addEventListener("pointerup", end);
     canvas.addEventListener("pointercancel", end);
+    document.addEventListener("mousemove", function (e) {
+      if (!locked()) return;
+      lookDelta(e.movementX || 0, e.movementY || 0, "lock");
+    });
+    document.addEventListener("pointerlockchange", function () {
+      if (!locked() && state.screen !== "menu" && !state.modalOpen) toast("Mouse libero. Clicca sulla scena per riprendere.", 2400);
+    });
   }
 
   function setupJoystick() {
@@ -437,7 +495,7 @@
   window.addEventListener("keydown", function (e) {
     if (typing(e)) return;
     if (/^(KeyW|KeyA|KeyS|KeyD|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(e.code)) { keys[e.code] = true; if (e.code.indexOf("Arrow") === 0 && !state.modalOpen) e.preventDefault(); }
-    if (e.code === "Escape" && !state.modalOpen && state.screen !== "menu") askMenu();
+    if ((e.code === "Escape" || e.code === "KeyM") && !state.modalOpen && state.screen !== "menu") askMenu();
   });
   window.addEventListener("keyup", function (e) { keys[e.code] = false; });
   window.addEventListener("blur", function () { keys = {}; });
@@ -449,7 +507,7 @@
     $("btnEdit").addEventListener("click", function () { openEditor(0, false); });
     $("btnMenu").addEventListener("click", askMenu);
     $("btnEditHere").addEventListener("click", function () { openEditor(state.i, true); });
-    $("cNo").addEventListener("click", function () { el.confirm.classList.add("hidden"); state.modalOpen = false; });
+    $("cNo").addEventListener("click", function () { el.confirm.classList.add("hidden"); state.modalOpen = false; tryLock(); });
     $("cYes").addEventListener("click", function () { el.confirm.classList.add("hidden"); toMenu(); });
     $("eCancel").addEventListener("click", closeEditor);
     $("eReset").addEventListener("click", function () {
@@ -468,6 +526,8 @@
     });
     el.invX.addEventListener("change", function () { settings.invX = el.invX.checked; save(KEY.settings, settings); });
     el.invY.addEventListener("change", function () { settings.invY = el.invY.checked; save(KEY.settings, settings); });
+    el.sens.addEventListener("input", function () { settings.sens = parseFloat(el.sens.value) || 1; el.sensVal.textContent = settings.sens.toFixed(1) + "×"; save(KEY.settings, settings); });
+    el.lock.addEventListener("change", function () { settings.lock = el.lock.checked; save(KEY.settings, settings); });
     el.nick.addEventListener("change", function () { nick = el.nick.value.replace(/\s+/g, " ").trim().slice(0, 20); save(KEY.nick, nick); showMenu(); });
     window.addEventListener("resize", layoutJoystick);
   }
@@ -525,6 +585,7 @@
     startRichiamo: function () { startMode("richiamo"); },
     toMenu: toMenu, render: render,
     setView: function (x, z, yaw, pitch) { var c = PW.constrain(x, z); view.x = c.x; view.z = c.z; view.y = c.y; view.s = c.s; view.yaw = yaw || 0; view.pitch = pitch || 0; view.yEased = view.y; },
-    getItems: function () { return items; }
+    getItems: function () { return items; },
+    _lookDelta: lookDelta, settings: settings
   };
 })();
