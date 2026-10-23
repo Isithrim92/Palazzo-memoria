@@ -47,6 +47,12 @@
     /* barra in alto durante l'esplorazione */
     #hud { position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: flex; justify-content: space-between;
       padding: calc(10px + env(safe-area-inset-top)) 12px 0; pointer-events: none; }
+    .hudr { display: flex; gap: 8px; }
+    #cross { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; z-index: 17; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.9); box-shadow: 0 0 3px rgba(0,0,0,.6); pointer-events: none; transition: all .15s; }
+    #cross i { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #fff; }
+    #cross.ready { border-color: #ffd34d; box-shadow: 0 0 10px 3px rgba(255,211,77,.85), 0 0 3px rgba(0,0,0,.6); transform: scale(1.35); }
+    #cross.ready i { background: #ffd34d; }
     #hud button { pointer-events: auto; background: rgba(18, 28, 48, .85); border: 1px solid var(--line); padding: 9px 14px; font-size: 15px; }
     #hint { position: fixed; top: calc(58px + env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 19; text-align: center;
       font-size: 13px; color: #dfe9fa; text-shadow: 0 1px 3px #000; pointer-events: none; transition: opacity .6s; }
@@ -119,14 +125,18 @@
         <input id="sens" type="range" min="0.3" max="3" step="0.1" value="1" style="width:100%">
         <label id="lockRow" class="check"><input id="lock" type="checkbox"> Guarda muovendo il mouse, senza cliccare (consigliato)</label>
       </details>
-      <small>Computer: muovi il mouse per guardarti intorno (clicca sulla scena la prima volta), W A S D o le frecce per camminare, M o Esc per il menu. Telefono: trascina con il dito per guardare, usa il cerchio a sinistra per camminare. Prototipo didattico: non ha valore clinico.</small>
+      <small>Computer: muovi il mouse per guardarti intorno (clicca sulla scena la prima volta), W A S D o le frecce per camminare, M per il menu, T per modificare la tappa, I per le impostazioni. Telefono: trascina con il dito per guardare, usa il cerchio a sinistra per camminare. Prototipo didattico: non ha valore clinico.</small>
     </div>
   </div>
 
   <div id="hud" class="hidden">
-    <button id="btnMenu" type="button">Menu</button>
-    <button id="btnEditHere" type="button">Modifica questa tappa</button>
+    <button id="btnMenu" type="button">Menu (M)</button>
+    <div class="hudr">
+      <button id="btnQuick" type="button" aria-label="Impostazioni">⚙ Impostazioni</button>
+      <button id="btnEditHere" type="button">Modifica tappa (T)</button>
+    </div>
   </div>
+  <div id="cross" class="hidden" aria-hidden="true"><i></i></div>
   <div id="hint" class="hidden"></div>
 
   <div id="panel" class="hidden">
@@ -146,6 +156,19 @@
         <button id="cNo" type="button">No, continua</button>
         <button id="cYes" class="primary" type="button">Sì, torna al menu</button>
       </div>
+    </div>
+  </div>
+
+  <div id="quick" class="screen hidden" role="dialog" aria-modal="true">
+    <div class="card" style="max-width:420px">
+      <h2>Impostazioni</h2>
+      <label for="qSens">Sensibilità del mouse: <b id="qSensVal">1.0×</b></label>
+      <input id="qSens" type="range" min="0.3" max="3" step="0.1" value="1" style="width:100%">
+      <label class="check"><input id="qInvX" type="checkbox"> Inverti sinistra/destra</label>
+      <label class="check"><input id="qInvY" type="checkbox"> Inverti su/giù</label>
+      <label id="qLockRow" class="check"><input id="qLock" type="checkbox"> Guarda muovendo il mouse, senza cliccare</label>
+      <small>Tasti: M menu · T modifica la tappa · I impostazioni · + / − sensibilità · Esc libera il mouse.</small>
+      <div class="row"><button id="qClose" class="primary" type="button">Chiudi</button></div>
     </div>
   </div>
 
