@@ -44,7 +44,7 @@
   var el = {
     loader: $("loader"), loaderText: $("loaderText"), menu: $("menu"), greet: $("greet"), lastResult: $("lastResult"), nick: $("nick"),
     hud: $("hud"), hint: $("hint"), panel: $("panel"), pKicker: $("pKicker"), pTitle: $("pTitle"), pText: $("pText"), pBtns: $("pBtns"),
-    toast: $("toast"), joy: $("joy"), joyKnob: $("joyKnob"), confirm: $("confirm"), cText: $("cText"), editor: $("editor"), editorList: $("editorList"),
+    toast: $("toast"), tbtns: $("tbtns"), btnJump: $("btnJump"), btnRun: $("btnRun"), joy: $("joy"), joyKnob: $("joyKnob"), confirm: $("confirm"), cText: $("cText"), editor: $("editor"), editorList: $("editorList"),
     invX: $("invX"), invY: $("invY"), sens: $("sens"), sensVal: $("sensVal"), lock: $("lock"), lockRow: $("lockRow"), quick: $("quick"), cross: $("cross"), qSens: $("qSens"), qSensVal: $("qSensVal"), qInvX: $("qInvX"), qInvY: $("qInvY"), qLock: $("qLock"), qLockRow: $("qLockRow"), btnQuick: $("btnQuick")
   };
 
@@ -54,6 +54,7 @@
   var START = { x: 0, z: 8, yaw: 0 };
   var auto = null;
   var keys = {};
+  var jump = { y: 0, vy: 0, req: false }, runHeld = false;
   var lastLook = -1e9, lookAccX = 0, lookAccY = 0, holdInhibit = false;
   var joyVec = { x: 0, y: 0 };
   var IS_TOUCH = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || "ontouchstart" in window || /[?&]joy=1/.test(location.search);
@@ -91,7 +92,8 @@
   }
 
   function layoutJoystick() {
-    el.joy.style.bottom = (el.panel.classList.contains("hidden") ? 28 : el.panel.offsetHeight + 34) + "px";
+    var bt = (el.panel.classList.contains("hidden") ? 28 : el.panel.offsetHeight + 34) + "px";
+    el.joy.style.bottom = bt; el.tbtns.style.bottom = bt;
   }
 
   /* ---------- logica dei modi ---------- */
@@ -125,7 +127,7 @@
     }
     if (!state.near) {
       setPanel(kicker, "Raggiungi la tappa " + (state.i + 1), "Cerca l'oggetto numero " + (state.i + 1) + " lungo il percorso, oppure fatti accompagnare.", [
-        { label: "Portami lì (R)", kind: "primary", run: function () { gotoStation(); } }
+        { label: IS_TOUCH ? "Portami lì" : "Portami lì (R)", kind: "primary", run: function () { gotoStation(); } }
       ]);
       return;
     }
@@ -176,8 +178,8 @@
     closeModals();
     el.menu.classList.add("hidden");
     el.hud.classList.remove("hidden");
-    if (IS_TOUCH) el.joy.classList.remove("hidden");
-    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · clic sull'oggetto per interagire · M menu · T modifica · I impostazioni · R portami alla tappa" : "Trascina il mouse per guardare · W A S D o frecce per camminare · clic sull'oggetto · M menu · T modifica · I impostazioni");
+    if (IS_TOUCH) { el.joy.classList.remove("hidden"); el.tbtns.classList.remove("hidden"); }
+    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · Shift corri · Spazio salta · clic sull'oggetto per interagire · M menu · T modifica · I impostazioni · R portami alla tappa" : "Trascina il mouse per guardare · W A S D o frecce per camminare · Shift corri · Spazio salta · clic sull'oggetto · M menu · T modifica · I impostazioni");
     el.hint.style.opacity = "1";
     el.hint.classList.remove("hidden");
     setTimeout(function () { el.hint.style.opacity = "0"; }, 12000);
@@ -232,7 +234,7 @@
   function toMenu() {
     auto = null;
     state.screen = "menu"; state.walking = false; state.near = false; state.shown = false;
-    el.hud.classList.add("hidden"); el.cross.classList.add("hidden"); el.panel.classList.add("hidden"); el.joy.classList.add("hidden"); el.hint.classList.add("hidden");
+    el.hud.classList.add("hidden"); el.cross.classList.add("hidden"); el.panel.classList.add("hidden"); el.joy.classList.add("hidden"); el.tbtns.classList.add("hidden"); el.hint.classList.add("hidden");
     view.x = START.x; view.z = START.z; view.yaw = START.yaw; view.pitch = 0;
     refreshStations();
     showMenu();
@@ -427,7 +429,7 @@
   function applyView(dt) {
     var eased = Math.min(1, dt * 10);
     view.yEased = view.yEased === undefined ? view.y : view.yEased + (view.y - view.yEased) * eased;
-    rig.object3D.position.set(view.x, view.yEased, view.z);
+    rig.object3D.position.set(view.x, view.yEased + jump.y, view.z);
     rig.object3D.rotation.y = view.yaw;
     cam.object3D.rotation.x = view.pitch;
     cam.object3D.rotation.order = "YXZ";
@@ -463,12 +465,19 @@
       autoStep(dt);
     } else if (mag > 0.08) {
       var fx = -Math.sin(view.yaw), fz = -Math.cos(view.yaw), rx = Math.cos(view.yaw), rz = -Math.sin(view.yaw);
-      var speed = 3.4;
+      var speed = (keys.ShiftLeft || keys.ShiftRight || runHeld) ? 5.8 : 3.4;
       var c = PW.constrain(view.x + (fx * f + rx * sd) * speed * dt, view.z + (fz * f + rz * sd) * speed * dt);
       view.x = c.x; view.z = c.z; view.y = c.y; view.s = c.s;
     } else {
       var c0 = PW.constrain(view.x, view.z);
       view.x = c0.x; view.z = c0.z; view.y = c0.y; view.s = c0.s;
+    }
+    // salto: solo quando si e' a terra
+    if (jump.req && jump.y === 0) jump.vy = 5.2;
+    jump.req = false;
+    if (jump.vy !== 0 || jump.y > 0) {
+      jump.vy -= 15 * dt; jump.y += jump.vy * dt;
+      if (jump.y <= 0) { jump.y = 0; jump.vy = 0; }
     }
     applyView(dt);
     updateAim();
@@ -567,6 +576,8 @@
   function typing(e) { var t = e.target && e.target.tagName; return t === "INPUT" || t === "TEXTAREA" || t === "SELECT"; }
   window.addEventListener("keydown", function (e) {
     if (typing(e)) return;
+    if (e.code === "Space" && !state.modalOpen && state.screen !== "menu") { jump.req = true; e.preventDefault(); }
+    if (/^(ShiftLeft|ShiftRight)$/.test(e.code)) keys[e.code] = true;
     if (/^(KeyW|KeyA|KeyS|KeyD|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(e.code)) { keys[e.code] = true; if (e.code.indexOf("Arrow") === 0 && !state.modalOpen) e.preventDefault(); }
     if (state.screen !== "menu" && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.code === "Escape" && !state.modalOpen) askMenu();
@@ -583,6 +594,7 @@
 
   /* ---------- collegamenti dei pulsanti ---------- */
   function wireUI() {
+    if (IS_TOUCH) { $("btnMenu").textContent = "Menu"; $("btnQuick").textContent = "⚙"; $("btnEditHere").textContent = "Modifica tappa"; }
     $("btnPercorso").addEventListener("click", function () { startMode("percorso"); });
     $("btnRichiamo").addEventListener("click", function () { startMode("richiamo"); });
     $("btnEdit").addEventListener("click", function () { openEditor(0, false); });
@@ -614,6 +626,12 @@
     el.qInvX.addEventListener("change", function () { settings.invX = el.qInvX.checked; save(KEY.settings, settings); syncSettingsUI(); });
     el.qInvY.addEventListener("change", function () { settings.invY = el.qInvY.checked; save(KEY.settings, settings); syncSettingsUI(); });
     el.btnQuick.addEventListener("click", openQuick);
+    el.btnJump.addEventListener("pointerdown", function (e) { e.preventDefault(); jump.req = true; });
+    function runOn(e) { e.preventDefault(); runHeld = true; el.btnRun.classList.add("on"); try { el.btnRun.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ } }
+    function runOff() { runHeld = false; el.btnRun.classList.remove("on"); }
+    el.btnRun.addEventListener("pointerdown", runOn);
+    el.btnRun.addEventListener("pointerup", runOff);
+    el.btnRun.addEventListener("pointercancel", runOff);
     $("qClose").addEventListener("click", closeQuick);
     el.nick.addEventListener("change", function () { nick = el.nick.value.replace(/\s+/g, " ").trim().slice(0, 20); save(KEY.nick, nick); showMenu(); });
     window.addEventListener("resize", layoutJoystick);
@@ -673,6 +691,6 @@
     toMenu: toMenu, render: render,
     setView: function (x, z, yaw, pitch) { var c = PW.constrain(x, z); view.x = c.x; view.z = c.z; view.y = c.y; view.s = c.s; view.yaw = yaw || 0; view.pitch = pitch || 0; view.yEased = view.y; },
     getItems: function () { return items; },
-    _lookDelta: lookDelta, settings: settings, _pick: pick, _interact: interact, _aimed: function () { return aimed; }
+    _jump: jump, _lookDelta: lookDelta, settings: settings, _pick: pick, _interact: interact, _aimed: function () { return aimed; }
   };
 })();
