@@ -1,0 +1,8 @@
+CREDITI E LICENZE
+=================
+Modelli 3D (licenza CC0, uso libero anche commerciale, nessun obbligo di citazione):
+- Kenney, "Pirate Kit" e "Mini Dungeon" - https://kenney.nl  (licenze in assets/pirate e assets/dungeon)
+- Poly Haven, "Wooden Lantern 01" (texture ridotte a 512 px) - https://polyhaven.com
+Libreria 3D:
+- A-Frame 1.6.0 (licenza MIT) - https://aframe.io  (testo della licenza in vendor/LICENSE-aframe.txt)
+Il resto (codice, percorso, interfaccia) e' stato scritto per questo progetto.

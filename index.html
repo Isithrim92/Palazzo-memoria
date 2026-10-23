@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Palazzo della memoria</title>
+  <meta name="description" content="Ambiente 3D per allenare la memoria con il metodo dei loci: un percorso da esplorare, con tappe personalizzabili.">
+  <script src="vendor/aframe-1.6.0.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1220; --card: #121c30; --line: #2a3a58; --text: #e8eef7; --muted: #9db0cc;
+      --accent: #4ecdc4; --accent-ink: #07211f; --ghost: #27385c; --ok: #58c27d; --no: #e07a7a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
+    button { font: inherit; cursor: pointer; border: 0; border-radius: 12px; padding: 12px 18px; font-weight: 650;
+      background: var(--ghost); color: var(--text); }
+    button.primary { background: var(--accent); color: var(--accent-ink); }
+    button.ok { background: var(--ok); color: #06240f; }
+    button.no { background: var(--no); color: #2a0a0a; }
+    button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #ffd166; outline-offset: 2px; }
+    input[type=text], textarea, select { width: 100%; font: inherit; padding: 9px 10px; color: var(--text);
+      background: #0d1627; border: 1px solid var(--line); border-radius: 10px; }
+    input[type=color] { width: 56px; height: 40px; padding: 2px; border-radius: 10px; border: 1px solid var(--line); background: #0d1627; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    .hidden { display: none !important; }
+
+    /* schermate a tutto schermo */
+    .screen { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+      background: rgba(11, 18, 32, .86); padding: 14px; overflow-y: auto; }
+    .card { width: 100%; max-width: 520px; max-height: 100%; overflow-y: auto; background: var(--card);
+      border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 18px; }
+    .card h1 { margin: 0 0 6px; font-size: 24px; }
+    .card h2 { margin: 0 0 8px; font-size: 20px; }
+    .card p { margin: 8px 0; line-height: 1.45; color: #c3cfe2; font-size: 15px; }
+    .card small { color: var(--muted); font-size: 12px; line-height: 1.4; display: block; margin-top: 10px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .row > button { flex: 1 1 140px; }
+    .result { margin: 12px 0 0; padding: 12px 14px; border-radius: 12px; background: #0d1627; border: 1px solid var(--line);
+      font-size: 15px; line-height: 1.45; color: #dce6f6; }
+    details { margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+    summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+    .check { display: flex; gap: 10px; align-items: center; font-size: 15px; color: var(--text); margin: 10px 0 0; }
+    .check input { width: 20px; height: 20px; }
+
+    /* barra in alto durante l'esplorazione */
+    #hud { position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: flex; justify-content: space-between;
+      padding: calc(10px + env(safe-area-inset-top)) 12px 0; pointer-events: none; }
+    #hud button { pointer-events: auto; background: rgba(18, 28, 48, .85); border: 1px solid var(--line); padding: 9px 14px; font-size: 15px; }
+    #hint { position: fixed; top: calc(58px + env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 19; text-align: center;
+      font-size: 13px; color: #dfe9fa; text-shadow: 0 1px 3px #000; pointer-events: none; transition: opacity .6s; }
+
+    /* pannello della tappa */
+    #panel { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+      width: min(620px, calc(100% - 24px)); z-index: 20; background: rgba(15, 24, 41, .93);
+      border: 1px solid #34507f; border-radius: 16px; padding: 14px 16px 14px; }
+    #pKicker { font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+    #pTitle { margin: 2px 0 4px; font-size: 21px; font-weight: 750; }
+    #pText { margin: 0; color: #c9d6ea; font-size: 15px; line-height: 1.4; }
+    #pBtns { display: flex; gap: 10px; margin-top: 12px; }
+    #pBtns button { flex: 1; }
+    #toast { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: 25; max-width: min(560px, calc(100% - 28px));
+      background: rgba(15, 24, 41, .95); border: 1px solid #34507f; border-radius: 14px; padding: 12px 16px;
+      font-size: 17px; text-align: center; pointer-events: none; transition: opacity .35s; }
+
+    /* joystick (solo touch) */
+    #joy { position: fixed; left: calc(22px + env(safe-area-inset-left)); z-index: 18; width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.28); touch-action: none; }
+    #joyKnob { position: absolute; left: 36px; top: 36px; width: 48px; height: 48px; border-radius: 50%; background: rgba(78,205,196,.75); }
+
+    /* editor */
+    .st { border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px 12px; margin: 12px 0; background: #0f192c; }
+    .st h3 { margin: 10px 0 0; font-size: 16px; }
+    .inline { display: flex; gap: 10px; align-items: end; }
+    .inline > div { flex: 1; }
+    #loader { z-index: 50; background: var(--bg); flex-direction: column; text-align: center; }
+    #loader p { color: var(--muted); }
+    #noscript { color: #fff; padding: 20px; }
+    canvas.a-canvas { touch-action: none; }
+    .a-enter-vr, .a-enter-ar, .a-orientation-modal { display: none !important; }
+  </style>
+</head>
+<body>
+  <noscript><p id="noscript">Per usare l'ambiente serve JavaScript.</p></noscript>
+
+  <a-scene id="scene" embedded="false" vr-mode-ui="enabled: false" loading-screen="enabled: false"
+           renderer="antialias: true" device-orientation-permission-ui="enabled: false">
+    <a-entity id="rig" position="0 0 0">
+      <a-entity id="cam" camera="fov: 72; near: 0.1; far: 700" position="0 1.6 0"></a-entity>
+    </a-entity>
+  </a-scene>
+
+  <div id="loader" class="screen">
+    <h2>Palazzo della memoria</h2>
+    <p id="loaderText">Preparo il percorso…</p>
+  </div>
+
+  <div id="menu" class="screen hidden">
+    <div class="card">
+      <h1>Palazzo della memoria</h1>
+      <p id="greet">Un percorso da esplorare in cui lasci ogni concetto in un luogo preciso: poi lo ritrovi camminando di nuovo lungo lo stesso percorso.</p>
+      <div id="lastResult" class="result hidden" role="status"></div>
+      <label for="nick">Soprannome (facoltativo)</label>
+      <input id="nick" type="text" maxlength="20" autocomplete="off" placeholder="Per esempio un nome da gioco">
+      <small>Non inserire il tuo nome e cognome. Il soprannome resta solo su questo dispositivo.</small>
+      <div class="row">
+        <button id="btnPercorso" class="primary" type="button">Percorso</button>
+        <button id="btnRichiamo" class="primary" type="button">Richiamo</button>
+      </div>
+      <div class="row">
+        <button id="btnEdit" type="button">Personalizza le tappe</button>
+      </div>
+      <details>
+        <summary>Impostazioni</summary>
+        <label class="check"><input id="invX" type="checkbox"> Inverti la direzione sinistra/destra del mouse</label>
+        <label class="check"><input id="invY" type="checkbox"> Inverti la direzione su/giù del mouse</label>
+      </details>
+      <small>Computer: trascina il mouse per guardarti intorno, W A S D o le frecce per camminare. Telefono: trascina con il dito per guardare, usa il cerchio a sinistra per camminare. Prototipo didattico: non ha valore clinico.</small>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <button id="btnMenu" type="button">Menu</button>
+    <button id="btnEditHere" type="button">Modifica questa tappa</button>
+  </div>
+  <div id="hint" class="hidden"></div>
+
+  <div id="panel" class="hidden">
+    <div id="pKicker"></div>
+    <div id="pTitle"></div>
+    <p id="pText"></p>
+    <div id="pBtns"></div>
+  </div>
+  <div id="toast" class="hidden" role="status"></div>
+  <div id="joy" class="hidden"><div id="joyKnob"></div></div>
+
+  <div id="confirm" class="screen hidden" role="dialog" aria-modal="true">
+    <div class="card">
+      <h2>Tornare al menu?</h2>
+      <p id="cText">Sei sicuro di voler tornare al menu?</p>
+      <div class="row">
+        <button id="cNo" type="button">No, continua</button>
+        <button id="cYes" class="primary" type="button">Sì, torna al menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="editor" class="screen hidden" role="dialog" aria-modal="true">
+    <div class="card" style="max-width:640px">
+      <h2>Personalizza le tappe</h2>
+      <p>Scrivi che cosa vuoi ricordare in ogni tappa e l'immagine che colleghi all'oggetto. Le modifiche si salvano solo su questo dispositivo.</p>
+      <div id="editorList"></div>
+      <div class="row">
+        <button id="eCancel" type="button">Annulla</button>
+        <button id="eReset" type="button">Ripristina l'esempio</button>
+        <button id="eSave" class="primary" type="button">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/content.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
