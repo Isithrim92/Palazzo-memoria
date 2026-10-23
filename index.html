@@ -75,6 +75,10 @@
       background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.28); touch-action: none; }
     #joyKnob { position: absolute; left: 36px; top: 36px; width: 48px; height: 48px; border-radius: 50%; background: rgba(78,205,196,.75); }
 
+    #tbtns { position: fixed; right: calc(18px + env(safe-area-inset-right)); z-index: 18; display: flex; gap: 12px; align-items: flex-end; }
+    #tbtns button { width: 66px; height: 66px; border-radius: 50%; padding: 0; font-size: 14px; touch-action: none; user-select: none;
+      background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); color: #fff; }
+    #tbtns button.on { background: rgba(78,205,196,.7); border-color: #4ecdc4; color: #07211f; }
     /* editor */
     .st { border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px 12px; margin: 12px 0; background: #0f192c; }
     .st h3 { margin: 10px 0 0; font-size: 16px; }
@@ -147,6 +151,10 @@
   </div>
   <div id="toast" class="hidden" role="status"></div>
   <div id="joy" class="hidden"><div id="joyKnob"></div></div>
+  <div id="tbtns" class="hidden">
+    <button id="btnJump" type="button" aria-label="Salta">Salta</button>
+    <button id="btnRun" type="button" aria-label="Corri">Corri</button>
+  </div>
 
   <div id="confirm" class="screen hidden" role="dialog" aria-modal="true">
     <div class="card">
@@ -167,7 +175,7 @@
       <label class="check"><input id="qInvX" type="checkbox"> Inverti sinistra/destra</label>
       <label class="check"><input id="qInvY" type="checkbox"> Inverti su/giù</label>
       <label id="qLockRow" class="check"><input id="qLock" type="checkbox"> Guarda muovendo il mouse, senza cliccare</label>
-      <small>Tasti: M menu · T modifica la tappa · I impostazioni · R portami alla tappa · + / − sensibilità · Esc libera il mouse.</small>
+      <small>Tasti: Shift corri · Spazio salta · M menu · T modifica · I impostazioni · R portami alla tappa · + / − sensibilità · Esc libera il mouse.</small>
       <div class="row"><button id="qClose" class="primary" type="button">Chiudi</button></div>
     </div>
   </div>
