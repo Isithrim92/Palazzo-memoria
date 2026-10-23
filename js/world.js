@@ -45,7 +45,7 @@
 
   var S_W5 = segs[5].s0;                 // inizio dell'ultimo tratto: (40, -12)
   var PIER1 = [-50, 17];                 // tratto di mare 1 (molo)
-  var PIER2 = [S_W5 - 5, S_W5 + 10.5];   // tratto di mare 2 (secondo molo)
+  var PIER2 = [S_W5 + 1.4, S_W5 + 10.5];   // tratto di mare 2 (secondo molo): comincia alla svolta, dritto verso la grotta
   var DOOR = [S_W5 + 11.4, S_W5 + 14.9]; // passaggio della porta della grotta
   PW.stationS = [11, 27, 49.5, 89, 107.5];
   PW.stationSide = [1, -1, 1, 1, 1];
@@ -78,7 +78,7 @@
   // semi-larghezza percorribile attorno alla linea del percorso
   PW.corridor = function (s) {
     // sul molo il passaggio resta stretto (largo come le assi) fino a quando c'e' terra sotto
-    var sw = Math.max(band(s, PIER1[0] - 0.3, PIER1[1] + 1.4, 0.3), band(s, PIER2[0] - 0.3, PIER2[1] + 1.4, 0.3));
+    var sw = Math.max(band(s, PIER1[0] - 0.3, PIER1[1] + 1.4, 0.3), band(s, PIER2[0] - 1.4, PIER2[1] + 1.4, 0.3));
     var w = lerp(3.4, 1.15, sw);
     w = lerp(w, 1.1, smooth(DOOR[0] - 0.6, DOOR[0] + 0.6, s) * (1 - smooth(DOOR[1] - 0.3, DOOR[1] + 0.3, s)));
     w = lerp(w, 5.4, smooth(DOOR[1] - 0.2, DOOR[1] + 0.8, s));
@@ -347,7 +347,7 @@
     }
     var ranges = [];
     holes.forEach(function (h) { var l = ranges[ranges.length - 1]; if (l && h.s - l.to <= 0.31) { l.to = h.s; l.n++; } else ranges.push({ from: h.s, to: h.s, n: 1 }); });
-    return { holes: holes.length, ranges: ranges, sample: holes.filter(function (h) { return h.s > 16 && h.s < 17.4 || h.s < 81; }).slice(0, 8), decks: decks.slice(0, 3).map(function (b) { return [b.min.x, b.max.x, b.min.z, b.max.z].map(function (v) { return +v.toFixed(2); }); }) };
+    return { holes: holes.length, ranges: ranges, sample: holes.slice(0, 6), decks: decks.slice(0, 3).map(function (b) { return [b.min.x, b.max.x, b.min.z, b.max.z].map(function (v) { return +v.toFixed(2); }); }) };
   };
   // controllo: elenca gli oggetti appoggiati a terra che restano sospesi o sprofondati
   PW.audit = function () {
@@ -423,14 +423,16 @@
     scatter([P("palm-straight")], 3, 56, 68, 8, 12, 63);
 
     /* tappa 4: il porto al tramonto */
-    pier(78.75, 96.25, P("structure-platform-dock"));
+    pier(S_W5 + 0.4, 96.25, P("structure-platform-dock"));
+    putXZ(P("structure-platform-dock"), 40, -12.4, heading(PW.pointAt(S_W5 + 0.4)), { y: "sea", dy: -0.06 });   // tassello della svolta
+    var DT = decks[0].max.y;   // quota delle assi: gli oggetti si appoggiano qui
     put(P("structure-platform-dock"), 89, 2.5, 0.6, { y: "sea" });
     put(P("structure-platform-dock"), 89, 2.5, -1.9, { y: "sea" });
     put(P("structure-platform-dock"), 89, 5.0, 0.6, { y: "sea" });
     [3.1, 5.6, -4.4, -6.9].forEach(function (f) { put(P("structure-platform-dock"), 89, 2.5, f, { y: "sea" }); });   // appoggio per cannone, barili e casse
     put(P("ship-pirate-large"), 89, -8.2, 0, { y: "sea", rot: 0 });
-    put(P("cannon-mobile"), 89, 2.6, 5, { y: 0.5, rot: 200 }); put(P("barrel"), 89, 2.6, -4.6, { y: 0.5 }); put(P("crate"), 89, 3.4, -5.2, { y: 0.5, rot: 20 });
-    put(P("cannon-ball"), 89, 3.1, 3.3, { y: 0.5 });
+    put(P("cannon-mobile"), 89, 2.6, 5, { y: DT, rot: 200 }); put(P("barrel"), 89, 2.6, -4.6, { y: DT }); put(P("crate"), 89, 3.4, -5.2, { y: DT, rot: 20 });
+    put(P("cannon-ball"), 89, 3.1, 3.3, { y: DT });
     put(P("flag-pirate-high"), 81.5, 1.5, 0, { y: 0.5 }); put(P("flag-pirate-high"), 81.5, -1.5, 0, { y: 0.5, rot: 180 });
     put(P("boat-row-large"), 84, 5, 0, { y: "sea", rot: 80 });
     put(P("rocks-a"), 93, 9, 0, { y: -0.3, scale: 1.5 }); put(P("rocks-b"), 85, -14, 0, { y: -0.3, scale: 1.4 });
@@ -452,6 +454,12 @@
     var roof = new THREE.Mesh(new THREE.BoxGeometry(18.5, 0.6, 18.5), new THREE.MeshStandardMaterial({ color: 0x4d515c, roughness: 1, flatShading: true }));
     roof.position.set(40, hp + 2.75 + 0.3, 9);
     world.add(roof);
+    // zoccolo di roccia sotto la facciata: niente muri sospesi sull'acqua (lascia libera la porta)
+    [[31.0, 38.7], [41.3, 49.0]].forEach(function (r) {
+      var pl = new THREE.Mesh(new THREE.BoxGeometry(r[1] - r[0], 2.2, 1.3), new THREE.MeshStandardMaterial({ color: 0x4d515c, roughness: 1, flatShading: true }));
+      pl.position.set((r[0] + r[1]) / 2, hp - 1.1 - 0.02, 1.5);
+      world.add(pl);
+    });
     // colonne agli angoli, stendardi, botti, tavolo, torce
     [[34.4, 3.4], [45.6, 3.4], [34.4, 14.6], [45.6, 14.6]].forEach(function (p) { putXZ(D("column"), p[0], p[1], 0, { scale: FL, y: hp }); });
     [[32.5, 7, -90], [32.5, 12, -90], [47.5, 7, 90], [47.5, 12, 90]].forEach(function (p) { putXZ(D("banner"), p[0] + (p[2] < 0 ? 0.22 : -0.22), p[1], 0, { scale: FL, y: hp, rot: p[2] }); });

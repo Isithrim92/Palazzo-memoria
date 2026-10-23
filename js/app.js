@@ -54,7 +54,7 @@
   var START = { x: 0, z: 8, yaw: 0 };
   var auto = null;
   var keys = {};
-  var lastLook = -1e9, lookAccX = 0, lookAccY = 0;
+  var lastLook = -1e9, lookAccX = 0, lookAccY = 0, holdInhibit = false;
   var joyVec = { x: 0, y: 0 };
   var IS_TOUCH = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || "ontouchstart" in window || /[?&]joy=1/.test(location.search);
 
@@ -448,6 +448,11 @@
     if (keys.ArrowLeft) turn += 1;
     if (keys.ArrowRight) turn -= 1;
     f += -joyVec.y; sd += joyVec.x;
+    // dopo "Portami lì" (R) i tasti gia' premuti vengono ignorati finche' non li lasci
+    if (holdInhibit) {
+      if (!f && !sd && !turn) holdInhibit = false;
+      else { f = 0; sd = 0; turn = 0; }
+    }
     var mag = Math.sqrt(f * f + sd * sd);
     if (mag > 1) { f /= mag; sd /= mag; mag = 1; }
     if (turn) view.yaw += turn * 1.8 * dt;
@@ -566,7 +571,7 @@
     if (state.screen !== "menu" && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.code === "Escape" && !state.modalOpen) askMenu();
       else if (e.code === "KeyM" && !state.modalOpen) askMenu();
-      else if (e.code === "KeyR" && !state.modalOpen) { if (!state.near && !state.walking) gotoStation(); }
+      else if (e.code === "KeyR" && !state.modalOpen) { if (!state.near && !state.walking) { holdInhibit = true; gotoStation(); } }
       else if (e.code === "KeyT" && !state.modalOpen) openEditor(stationNearView(), true);
       else if (e.code === "KeyI") { if (state.modalOpen && !el.quick.classList.contains("hidden")) closeQuick(); else openQuick(); }
       else if (!state.modalOpen && (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "+")) setSens(settings.sens + 0.1, true);
