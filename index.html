@@ -78,6 +78,8 @@
     #tbtns { position: fixed; right: calc(18px + env(safe-area-inset-right)); z-index: 18; display: flex; gap: 12px; align-items: flex-end; }
     #tbtns button { width: 66px; height: 66px; border-radius: 50%; padding: 0; font-size: 14px; touch-action: none; user-select: none;
       background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); color: #fff; }
+    #joy.run { border-color: #ffd34d; box-shadow: 0 0 12px rgba(255,211,77,.7); }
+    #joy.run #joyKnob { background: rgba(255,211,77,.85); }
     #tbtns button.on { background: rgba(78,205,196,.7); border-color: #4ecdc4; color: #07211f; }
     /* editor */
     .st { border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px 12px; margin: 12px 0; background: #0f192c; }
@@ -153,7 +155,6 @@
   <div id="joy" class="hidden"><div id="joyKnob"></div></div>
   <div id="tbtns" class="hidden">
     <button id="btnJump" type="button" aria-label="Salta">Salta</button>
-    <button id="btnRun" type="button" aria-label="Corri">Corri</button>
   </div>
 
   <div id="confirm" class="screen hidden" role="dialog" aria-modal="true">
