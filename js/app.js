@@ -44,7 +44,7 @@
   var el = {
     loader: $("loader"), loaderText: $("loaderText"), menu: $("menu"), greet: $("greet"), lastResult: $("lastResult"), nick: $("nick"),
     hud: $("hud"), hint: $("hint"), panel: $("panel"), pKicker: $("pKicker"), pTitle: $("pTitle"), pText: $("pText"), pBtns: $("pBtns"),
-    toast: $("toast"), tbtns: $("tbtns"), btnJump: $("btnJump"), btnRun: $("btnRun"), joy: $("joy"), joyKnob: $("joyKnob"), confirm: $("confirm"), cText: $("cText"), editor: $("editor"), editorList: $("editorList"),
+    toast: $("toast"), tbtns: $("tbtns"), btnJump: $("btnJump"), joy: $("joy"), joyKnob: $("joyKnob"), confirm: $("confirm"), cText: $("cText"), editor: $("editor"), editorList: $("editorList"),
     invX: $("invX"), invY: $("invY"), sens: $("sens"), sensVal: $("sensVal"), lock: $("lock"), lockRow: $("lockRow"), quick: $("quick"), cross: $("cross"), qSens: $("qSens"), qSensVal: $("qSensVal"), qInvX: $("qInvX"), qInvY: $("qInvY"), qLock: $("qLock"), qLockRow: $("qLockRow"), btnQuick: $("btnQuick")
   };
 
@@ -179,7 +179,7 @@
     el.menu.classList.add("hidden");
     el.hud.classList.remove("hidden");
     if (IS_TOUCH) { el.joy.classList.remove("hidden"); el.tbtns.classList.remove("hidden"); }
-    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · usa il cerchio a sinistra per camminare" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · Shift corri · Spazio salta · clic sull'oggetto per interagire · M menu · T modifica · I impostazioni · R portami alla tappa" : "Trascina il mouse per guardare · W A S D o frecce per camminare · Shift corri · Spazio salta · clic sull'oggetto · M menu · T modifica · I impostazioni");
+    el.hint.textContent = IS_TOUCH ? "Trascina per guardare · cerchio a sinistra per camminare (doppio tocco e tieni premuto per correre) · tocca l'oggetto illuminato per interagire" : (settings.lock ? "Muovi il mouse per guardare · W A S D o frecce per camminare · Shift corri · Spazio salta · clic sull'oggetto per interagire · M menu · T modifica · I impostazioni · R portami alla tappa" : "Trascina il mouse per guardare · W A S D o frecce per camminare · Shift corri · Spazio salta · clic sull'oggetto · M menu · T modifica · I impostazioni");
     el.hint.style.opacity = "1";
     el.hint.classList.remove("hidden");
     setTimeout(function () { el.hint.style.opacity = "0"; }, 12000);
@@ -403,9 +403,12 @@
     return best;
   }
   function updateAim() {
-    if (IS_TOUCH || state.modalOpen || state.screen === "menu") { aimed = -1; return; }
+    if (state.modalOpen || state.screen === "menu") { aimed = -1; if (IS_TOUCH) el.cross.classList.add("hidden"); return; }
     var a = pick(0, 0);
-    if (a !== aimed) { aimed = a; el.cross.classList.toggle("ready", a >= 0); }
+    if (a !== aimed) {
+      aimed = a; el.cross.classList.toggle("ready", a >= 0);
+      if (IS_TOUCH) el.cross.classList.toggle("hidden", a < 0);   // sul telefono il mirino compare solo su un oggetto interagibile
+    }
   }
   function interact(i) {
     if (i < 0 || state.modalOpen || state.screen === "menu") return;
@@ -566,9 +569,14 @@
       joyVec.x = dx / R; joyVec.y = dy / R;
       el.joyKnob.style.transform = "translate(" + dx + "px," + dy + "px)";
     }
-    el.joy.addEventListener("pointerdown", function (e) { id = e.pointerId; el.joy.setPointerCapture(id); move(e); e.preventDefault(); });
+    var lastEnd = -1e9;
+    el.joy.addEventListener("pointerdown", function (e) {
+      id = e.pointerId; el.joy.setPointerCapture(id); move(e); e.preventDefault();
+      // doppio tocco sul cerchio e tenere premuto = corri finche' non lo lasci
+      if (performance.now() - lastEnd < 380) { runHeld = true; el.joy.classList.add("run"); }
+    });
     el.joy.addEventListener("pointermove", function (e) { if (e.pointerId === id) move(e); });
-    function end(e) { if (e.pointerId === id) { id = null; joyVec.x = 0; joyVec.y = 0; el.joyKnob.style.transform = ""; } }
+    function end(e) { if (e.pointerId === id) { id = null; joyVec.x = 0; joyVec.y = 0; el.joyKnob.style.transform = ""; runHeld = false; el.joy.classList.remove("run"); lastEnd = performance.now(); } }
     el.joy.addEventListener("pointerup", end);
     el.joy.addEventListener("pointercancel", end);
   }
@@ -627,11 +635,7 @@
     el.qInvY.addEventListener("change", function () { settings.invY = el.qInvY.checked; save(KEY.settings, settings); syncSettingsUI(); });
     el.btnQuick.addEventListener("click", openQuick);
     el.btnJump.addEventListener("pointerdown", function (e) { e.preventDefault(); jump.req = true; });
-    function runOn(e) { e.preventDefault(); runHeld = true; el.btnRun.classList.add("on"); try { el.btnRun.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ } }
-    function runOff() { runHeld = false; el.btnRun.classList.remove("on"); }
-    el.btnRun.addEventListener("pointerdown", runOn);
-    el.btnRun.addEventListener("pointerup", runOff);
-    el.btnRun.addEventListener("pointercancel", runOff);
+
     $("qClose").addEventListener("click", closeQuick);
     el.nick.addEventListener("change", function () { nick = el.nick.value.replace(/\s+/g, " ").trim().slice(0, 20); save(KEY.nick, nick); showMenu(); });
     window.addEventListener("resize", layoutJoystick);
